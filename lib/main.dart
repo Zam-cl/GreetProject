@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -59,6 +60,102 @@ class _Star {
   }
 }
 
+class _CometFrame {
+  const _CometFrame({
+    required this.head,
+    required this.angle,
+    required this.opacity,
+    required this.trail,
+  });
+
+  final Offset head; // normalized 0..1 position of the bright head
+  final double angle; // travel direction, radians
+  final double opacity;
+  final double trail; // trail length, normalized to screen diagonal
+}
+
+class _Comet {
+  const _Comet({
+    required this.seed,
+    required this.phase,
+    required this.period,
+  });
+
+  final int seed;
+  final double phase;
+  final double period; // seconds per cycle; comet only flies briefly within it
+
+  static const double _flightFraction = 0.1;
+
+  // Mostly dormant; returns null except during its brief flight window.
+  _CometFrame? frameAt(double t) {
+    final raw = (t + phase) / period;
+    final cycle = raw.floor();
+    final progress = raw - cycle;
+    if (progress > _flightFraction) return null;
+
+    final flightT = progress / _flightFraction;
+    final random = Random(seed * 7919 + cycle * 104729);
+    final startX = random.nextDouble() * 0.7;
+    final startY = random.nextDouble() * 0.35;
+    final angle = pi * 0.2 + random.nextDouble() * pi * 0.1;
+    final length = 0.32 + random.nextDouble() * 0.22;
+    final head = Offset(
+      startX + cos(angle) * length * flightT,
+      startY + sin(angle) * length * flightT,
+    );
+    final fadeIn = (flightT / 0.2).clamp(0.0, 1.0);
+    final fadeOut = (1 - (flightT - 0.6) / 0.4).clamp(0.0, 1.0);
+    return _CometFrame(
+      head: head,
+      angle: angle,
+      opacity: min(fadeIn, fadeOut),
+      trail: length * 0.4,
+    );
+  }
+}
+
+class _CometsPainter extends CustomPainter {
+  _CometsPainter(this.comets, this.t);
+
+  final List<_Comet> comets;
+  final double t;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final comet in comets) {
+      final frame = comet.frameAt(t);
+      if (frame == null || frame.opacity <= 0) continue;
+
+      final head = Offset(
+        frame.head.dx * size.width,
+        frame.head.dy * size.height,
+      );
+      final tail = Offset(
+        head.dx - cos(frame.angle) * frame.trail * size.width,
+        head.dy - sin(frame.angle) * frame.trail * size.height,
+      );
+
+      final linePaint = Paint()
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round
+        ..shader = ui.Gradient.linear(tail, head, [
+          Colors.white.withValues(alpha: 0),
+          Colors.white.withValues(alpha: frame.opacity),
+        ]);
+      canvas.drawLine(tail, head, linePaint);
+      canvas.drawCircle(
+        head,
+        2,
+        Paint()..color = Colors.white.withValues(alpha: frame.opacity),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CometsPainter oldDelegate) => true;
+}
+
 class GreetingPage extends StatefulWidget {
   const GreetingPage({super.key});
 
@@ -68,9 +165,11 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 10;
+  static const int editCount = 11;
 
   late final AnimationController _controller;
+  Offset _parallax = Offset.zero;
+
   static final List<_Star> _stars = List.generate(175, (index) {
     final random = Random();
     return _Star(
@@ -79,6 +178,15 @@ class _GreetingPageState extends State<GreetingPage>
       color: random.nextBool() ? Colors.yellow : Colors.white,
       phase: random.nextDouble() * 2 * pi,
       speed: 0.15 + random.nextDouble() * 0.35,
+    );
+  });
+
+  static final List<_Comet> _comets = List.generate(4, (index) {
+    final random = Random();
+    return _Comet(
+      seed: index + 1000,
+      phase: random.nextDouble() * 20,
+      period: 6 + random.nextDouble() * 7,
     );
   });
 
@@ -97,71 +205,93 @@ class _GreetingPageState extends State<GreetingPage>
     super.dispose();
   }
 
+  // Pointer position on desktop (mouse) or a finger drag on touch devices
+  // both drive a subtle parallax shift of the starfield.
+  void _updateParallax(Offset localPosition, Size size) {
+    if (size.width == 0 || size.height == 0) return;
+    final dx = ((localPosition.dx / size.width - 0.5) * 2).clamp(-1.0, 1.0);
+    final dy = ((localPosition.dy / size.height - 0.5) * 2).clamp(-1.0, 1.0);
+    setState(() => _parallax = Offset(dx, dy));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color.fromRGBO(24, 11, 29, 1),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          return AnimatedBuilder(
-            animation: _controller,
-            builder: (context, _) {
-              final t = DateTime.now().millisecondsSinceEpoch / 1000.0;
-              return Stack(
-                children: [
-                  for (final star in _stars) _buildStar(star, t, constraints),
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: ShaderMask(
-                          shaderCallback: (bounds) => const LinearGradient(
-                            colors: [
-                              Color(0xFF7F5CFF),
-                              Color(0xFFD86FFF),
-                              Color(0xFF5CE1FF),
-                            ],
-                          ).createShader(bounds),
-                          child: Text(
-                            'Hello there!',
-                            style: GoogleFonts.orbitron(
-                              fontSize: 64,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              letterSpacing: 2,
-                              shadows: [
-                                Shadow(
-                                  color: const Color(0xFFB388FF)
-                                      .withValues(alpha: 0.75),
-                                  blurRadius: 6,
+          final size = Size(constraints.maxWidth, constraints.maxHeight);
+          return Listener(
+            onPointerHover: (e) => _updateParallax(e.localPosition, size),
+            onPointerMove: (e) => _updateParallax(e.localPosition, size),
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, _) {
+                final t = DateTime.now().millisecondsSinceEpoch / 1000.0;
+                return Stack(
+                  children: [
+                    for (final star in _stars)
+                      _buildStar(star, t, constraints),
+                    Positioned.fill(
+                      child: CustomPaint(painter: _CometsPainter(_comets, t)),
+                    ),
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Transform.translate(
+                          offset: Offset(_parallax.dx * -4, _parallax.dy * -4),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: ShaderMask(
+                              shaderCallback: (bounds) =>
+                                  const LinearGradient(
+                                    colors: [
+                                      Color(0xFF7F5CFF),
+                                      Color(0xFFD86FFF),
+                                      Color(0xFF5CE1FF),
+                                    ],
+                                  ).createShader(bounds),
+                              child: Text(
+                                'Hello there!',
+                                style: GoogleFonts.orbitron(
+                                  fontSize: 64,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 2,
+                                  shadows: [
+                                    Shadow(
+                                      color: const Color(0xFFB388FF)
+                                          .withValues(alpha: 0.75),
+                                      blurRadius: 6,
+                                    ),
+                                    Shadow(
+                                      color: const Color(0xFF5CE1FF)
+                                          .withValues(alpha: 0.45),
+                                      blurRadius: 14,
+                                    ),
+                                  ],
                                 ),
-                                Shadow(
-                                  color: const Color(0xFF5CE1FF)
-                                      .withValues(alpha: 0.45),
-                                  blurRadius: 14,
-                                ),
-                              ],
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                  Positioned(
-                    top: 8,
-                    right: 12,
-                    child: Text(
-                      'Test-v$editCount',
-                      style: GoogleFonts.comicNeue(
-                        fontSize: 12,
-                        color: Colors.white70,
+                    Positioned(
+                      top: 8,
+                      right: 12,
+                      child: Text(
+                        'Test-v$editCount',
+                        style: GoogleFonts.comicNeue(
+                          fontSize: 12,
+                          color: Colors.white70,
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              );
-            },
+                  ],
+                );
+              },
+            ),
           );
         },
       ),
