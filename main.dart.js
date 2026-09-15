@@ -53659,19 +53659,18 @@ return new A.qh(B.ye,"Greetings App",A.a3m(s,A.a5A(B.R,s,s,B.C5),s),!1,s)}}
 A.ns.prototype={}
 A.Xy.prototype={}
 A.mX.prototype={
-VU(a){var s,r,q,p,o,n,m,l,k,j=(a+this.b)/this.c,i=B.d.fY(j),h=j-i
-if(h>0.025)return null
-s=h/0.025
+VU(a){var s,r,q,p,o,n,m,l,k=(a+this.b)/this.c,j=B.d.fY(k),i=k-j
+if(i>0.025)return null
+s=i/0.025
 r=new A.Ft()
-r.yS(this.a*7919+i*104729)
+r.yS(this.a*7919+j*104729)
 q=r.wi()
 p=r.dW()
 o=0.35+r.dW()*0.3
-n=r.dW()
-m=q?1:-1
-l=Math.atan2((n-0.5)*0.25,m)
-k=q?r.dW()*0.25:1-r.dW()*0.25
-return new A.Xy(new A.B(k+Math.cos(l)*o*s,0.1+p*0.65+Math.sin(l)*o*s),l,Math.min(B.d.dr(s/0.2,0,1),B.d.dr(1-(s-0.6)/0.4,0,1)),o*0.4)}}
+n=(15+r.dW()*25)*3.141592653589793/180
+m=q?n:3.141592653589793-n
+l=q?r.dW()*0.25:1-r.dW()*0.25
+return new A.Xy(new A.B(l+Math.cos(m)*o*s,0.1+p*0.55+Math.sin(m)*o*s),m,Math.min(B.d.dr(s/0.2,0,1),B.d.dr(1-(s-0.6)/0.4,0,1)),o*0.4)}}
 A.CJ.prototype={
 aK(a,a0){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b
 for(s=this.b,r=t.m,q=a.a,p=a0.a,o=a0.b,n=t.bk,m=this.c,l=0;l<3;++l){k=s[l].VU(m)
@@ -53759,7 +53758,7 @@ m=p.b
 j.push(new A.mf(n.dW()*r.b,n.dW()*r.d,l,l,l,l,A.adZ(l,new A.fS(p.c.i9(1-Math.abs(2*(o-Math.floor(o))-1)),l,l,l,l,l,B.eB),m,l,l,m),l))}j.push(A.agA(0,A.a5H(l,l,new A.CJ($.abQ(),k))))
 s=this.a.e
 j.push(A.adC(new A.md(B.xT,A.a82(new A.yd(B.uU,new A.Ba(new A.Yv(),A.a7W("Hello there!",A.am4().$5$color$fontSize$fontWeight$letterSpacing$shadows(B.i,64,B.bt,2,A.d([new A.em(B.wR.i9(0.75),B.k,6),new A.em(B.iV.i9(0.45),B.k,14)],t.o5))),l),l),new A.B(s.a*-4,s.b*-4)),l),l,l))
-j.push(A.a7f(l,A.a7W("Test-v13",A.am3().$2$color$fontSize(B.y,12)),l,l,l,12,8,l))
+j.push(A.a7f(l,A.a7W("Test-v14",A.am3().$2$color$fontSize(B.y,12)),l,l,l,12,8,l))
 return A.Vf(B.eq,j,B.hD)},
 $S:329}
 A.Yv.prototype={
