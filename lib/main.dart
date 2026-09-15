@@ -96,10 +96,16 @@ class _Comet {
 
     final flightT = progress / _flightFraction;
     final random = Random(seed * 7919 + cycle * 104729);
-    final startX = random.nextDouble() * 0.7;
-    final startY = random.nextDouble() * 0.35;
-    final angle = pi * 0.2 + random.nextDouble() * pi * 0.1;
-    final length = 0.32 + random.nextDouble() * 0.22;
+    // Mostly horizontal, randomly left-to-right or right-to-left each
+    // flight, with a slight vertical wobble so it doesn't look mechanical.
+    final goingRight = random.nextBool();
+    final startY = 0.1 + random.nextDouble() * 0.65;
+    final length = 0.35 + random.nextDouble() * 0.3;
+    final wobble = (random.nextDouble() - 0.5) * 0.25;
+    final angle = atan2(wobble, goingRight ? 1.0 : -1.0);
+    final startX = goingRight
+        ? random.nextDouble() * 0.25
+        : 1.0 - random.nextDouble() * 0.25;
     final head = Offset(
       startX + cos(angle) * length * flightT,
       startY + sin(angle) * length * flightT,
@@ -165,7 +171,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 12;
+  static const int editCount = 13;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
