@@ -53658,8 +53658,8 @@ A.ns.prototype={}
 A.Xy.prototype={}
 A.mX.prototype={
 VT(a){var s,r,q,p,o,n,m=(a+this.b)/this.c,l=B.d.fY(m),k=m-l
-if(k>0.1)return null
-s=k/0.1
+if(k>0.025)return null
+s=k/0.025
 r=new A.Ft()
 r.yR(this.a*7919+l*104729)
 q=r.eq()
@@ -53669,7 +53669,7 @@ n=0.32+r.eq()*0.22
 return new A.Xy(new A.B(q*0.7+Math.cos(o)*n*s,p*0.35+Math.sin(o)*n*s),o,Math.min(B.d.dr(s/0.2,0,1),B.d.dr(1-(s-0.6)/0.4,0,1)),n*0.4)}}
 A.CJ.prototype={
 aK(a,a0){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b
-for(s=this.b,r=t.m,q=a.a,p=a0.a,o=a0.b,n=t.bk,m=this.c,l=0;l<4;++l){k=s[l].VT(m)
+for(s=this.b,r=t.m,q=a.a,p=a0.a,o=a0.b,n=t.bk,m=this.c,l=0;l<3;++l){k=s[l].VT(m)
 if(k==null||k.c<=0)continue
 j=k.a
 i=j.a*p
@@ -53728,7 +53728,7 @@ $1(a){var s=B.bq.eq(),r=B.bq.Y5()?B.C6:B.i
 return new A.ns(a,1.5+s*2.5,r,B.bq.eq()*2*3.141592653589793,0.15+B.bq.eq()*0.35)},
 $S:324}
 A.Ys.prototype={
-$1(a){return new A.mX(a+1000,B.bq.eq()*20,6+B.bq.eq()*7)},
+$1(a){return new A.mX(a+1000,B.bq.eq()*30,14+B.bq.eq()*12)},
 $S:325}
 A.Yu.prototype={
 $0(){return this.a.e=new A.B(this.b,this.c)},
@@ -53754,7 +53754,7 @@ m=p.b
 j.push(new A.mf(n.eq()*r.b,n.eq()*r.d,l,l,l,l,A.adZ(l,new A.fS(p.c.i9(1-Math.abs(2*(o-Math.floor(o))-1)),l,l,l,l,l,B.eB),m,l,l,m),l))}j.push(A.agA(0,A.a5H(l,l,new A.CJ($.abQ(),k))))
 s=this.a.e
 j.push(A.adC(new A.md(B.xT,A.a82(new A.yd(B.uU,new A.Ba(new A.Yv(),A.a7W("Hello there!",A.am4().$5$color$fontSize$fontWeight$letterSpacing$shadows(B.i,64,B.bt,2,A.d([new A.em(B.wR.i9(0.75),B.k,6),new A.em(B.iV.i9(0.45),B.k,14)],t.o5))),l),l),new A.B(s.a*-4,s.b*-4)),l),l,l))
-j.push(A.a7f(l,A.a7W("Test-v11",A.am3().$2$color$fontSize(B.y,12)),l,l,l,12,8,l))
+j.push(A.a7f(l,A.a7W("Test-v12",A.am3().$2$color$fontSize(B.y,12)),l,l,l,12,8,l))
 return A.Vf(B.eq,j,B.hD)},
 $S:329}
 A.Yv.prototype={
@@ -58493,7 +58493,7 @@ f=i[2]
 e=[400*h/(h+27.13),400*g/(g+27.13),400*f/(f+27.13)]
 return new A.WO(k,(40*e[0]+20*e[1]+e[2])/20*j,j,j,b,1,q,l,A.w9(l,0.25),1.48+p)})
 s($,"aoV","abR",()=>A.a2J(175,new A.Yt(),!0,A.aa("ns")))
-s($,"aoU","abQ",()=>A.a2J(4,new A.Ys(),!0,A.aa("mX")))})();(function nativeSupport(){!function(){var s=function(a){var m={}
+s($,"aoU","abQ",()=>A.a2J(3,new A.Ys(),!0,A.aa("mX")))})();(function nativeSupport(){!function(){var s=function(a){var m={}
 m[a]=1
 return Object.keys(hunkHelpers.convertToFastObject(m))[0]}
 v.getIsolateTag=function(a){return s("___dart_"+a+v.isolateTag)}
