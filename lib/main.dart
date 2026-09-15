@@ -68,7 +68,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 9;
+  static const int editCount = 10;
 
   late final AnimationController _controller;
   static final List<_Star> _stars = List.generate(175, (index) {
@@ -130,14 +130,16 @@ class _GreetingPageState extends State<GreetingPage>
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
                               letterSpacing: 2,
-                              shadows: const [
+                              shadows: [
                                 Shadow(
-                                  color: Color(0xFFB388FF),
-                                  blurRadius: 30,
+                                  color: const Color(0xFFB388FF)
+                                      .withValues(alpha: 0.75),
+                                  blurRadius: 6,
                                 ),
                                 Shadow(
-                                  color: Color(0xFF5CE1FF),
-                                  blurRadius: 60,
+                                  color: const Color(0xFF5CE1FF)
+                                      .withValues(alpha: 0.45),
+                                  blurRadius: 14,
                                 ),
                               ],
                             ),
