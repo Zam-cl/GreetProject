@@ -85,7 +85,7 @@ class _Comet {
   final double phase;
   final double period; // seconds per cycle; comet only flies briefly within it
 
-  static const double _flightFraction = 0.1;
+  static const double _flightFraction = 0.025;
 
   // Mostly dormant; returns null except during its brief flight window.
   _CometFrame? frameAt(double t) {
@@ -165,7 +165,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 11;
+  static const int editCount = 12;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -181,12 +181,12 @@ class _GreetingPageState extends State<GreetingPage>
     );
   });
 
-  static final List<_Comet> _comets = List.generate(4, (index) {
+  static final List<_Comet> _comets = List.generate(3, (index) {
     final random = Random();
     return _Comet(
       seed: index + 1000,
-      phase: random.nextDouble() * 20,
-      period: 6 + random.nextDouble() * 7,
+      phase: random.nextDouble() * 30,
+      period: 14 + random.nextDouble() * 12,
     );
   });
 
