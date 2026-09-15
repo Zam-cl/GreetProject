@@ -1,6 +1,6 @@
 {
-    "name": "test_app",
-    "short_name": "test_app",
+    "name": "Greetings App",
+    "short_name": "Greetings App",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
