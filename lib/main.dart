@@ -68,7 +68,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 8;
+  static const int editCount = 9;
 
   late final AnimationController _controller;
   static final List<_Star> _stars = List.generate(175, (index) {
@@ -111,12 +111,38 @@ class _GreetingPageState extends State<GreetingPage>
                 children: [
                   for (final star in _stars) _buildStar(star, t, constraints),
                   Center(
-                    child: Text(
-                      'Hello there!',
-                      style: GoogleFonts.comicNeue(
-                        fontSize: 40,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: ShaderMask(
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [
+                              Color(0xFF7F5CFF),
+                              Color(0xFFD86FFF),
+                              Color(0xFF5CE1FF),
+                            ],
+                          ).createShader(bounds),
+                          child: Text(
+                            'Hello there!',
+                            style: GoogleFonts.orbitron(
+                              fontSize: 64,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 2,
+                              shadows: const [
+                                Shadow(
+                                  color: Color(0xFFB388FF),
+                                  blurRadius: 30,
+                                ),
+                                Shadow(
+                                  color: Color(0xFF5CE1FF),
+                                  blurRadius: 60,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
