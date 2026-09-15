@@ -25,25 +25,37 @@ class MyApp extends StatelessWidget {
 
 class _Star {
   const _Star({
-    required this.left,
-    required this.top,
+    required this.seed,
     required this.size,
     required this.color,
     required this.phase,
     required this.speed,
   });
 
-  final double left;
-  final double top;
+  final int seed;
   final double size;
   final Color color;
   final double phase;
   final double speed;
 
+  double _cycleProgress(double t) {
+    final raw = t * speed + phase / (2 * pi);
+    return raw - raw.floorToDouble();
+  }
+
+  // Fades fully in and out (0 -> 1 -> 0) once per cycle.
   double brightnessAt(double t) {
-    // Oscillates between 0.2 and 1.0, each star with its own phase/speed
-    // so the twinkling isn't synchronized across the sky.
-    return 0.6 + 0.4 * sin(2 * pi * (t * speed) + phase);
+    final frac = _cycleProgress(t);
+    return 1 - (2 * frac - 1).abs();
+  }
+
+  // A new random position each cycle, picked the instant the star is
+  // fully faded out so the "jump" itself is invisible.
+  Offset positionAt(double t) {
+    final raw = t * speed + phase / (2 * pi);
+    final cycle = raw.floor();
+    final random = Random(seed * 97 + cycle * 131071);
+    return Offset(random.nextDouble(), random.nextDouble());
   }
 }
 
@@ -56,14 +68,13 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 7;
+  static const int editCount = 8;
 
   late final AnimationController _controller;
-  static final List<_Star> _stars = List.generate(175, (_) {
+  static final List<_Star> _stars = List.generate(175, (index) {
     final random = Random();
     return _Star(
-      left: random.nextDouble(),
-      top: random.nextDouble(),
+      seed: index,
       size: 1.5 + random.nextDouble() * 2.5,
       color: random.nextBool() ? Colors.yellow : Colors.white,
       phase: random.nextDouble() * 2 * pi,
@@ -98,21 +109,7 @@ class _GreetingPageState extends State<GreetingPage>
               final t = DateTime.now().millisecondsSinceEpoch / 1000.0;
               return Stack(
                 children: [
-                  for (final star in _stars)
-                    Positioned(
-                      left: star.left * constraints.maxWidth,
-                      top: star.top * constraints.maxHeight,
-                      child: Container(
-                        width: star.size,
-                        height: star.size,
-                        decoration: BoxDecoration(
-                          color: star.color.withValues(
-                            alpha: star.brightnessAt(t),
-                          ),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
+                  for (final star in _stars) _buildStar(star, t, constraints),
                   Center(
                     child: Text(
                       'Hello there!',
@@ -139,6 +136,22 @@ class _GreetingPageState extends State<GreetingPage>
             },
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildStar(_Star star, double t, BoxConstraints constraints) {
+    final pos = star.positionAt(t);
+    return Positioned(
+      left: pos.dx * constraints.maxWidth,
+      top: pos.dy * constraints.maxHeight,
+      child: Container(
+        width: star.size,
+        height: star.size,
+        decoration: BoxDecoration(
+          color: star.color.withValues(alpha: star.brightnessAt(t)),
+          shape: BoxShape.circle,
+        ),
       ),
     );
   }
