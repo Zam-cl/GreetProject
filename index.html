@@ -34,6 +34,24 @@
 </head>
 <body>
   <!--
+    Removes any service worker registered by earlier deploys of this app
+    (Flutter's PWA service worker otherwise keeps serving a stale cached
+    build until the tab is fully closed and reopened).
+  -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        for (const reg of regs) reg.unregister();
+      });
+    }
+    if (window.caches) {
+      caches.keys().then((keys) => {
+        for (const key of keys) caches.delete(key);
+      });
+    }
+  </script>
+
+  <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
     or to give the user feedback during the initialization process.
