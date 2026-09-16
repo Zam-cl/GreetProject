@@ -19323,7 +19323,7 @@ s.zl()},
 anu(){var s,r,q,p,o,n,m,l,k,j=A.d([],t.ty),i=new A.w1()
 i.rW(42)
 for(s=0;s<3;++s){r=s*2.0943951023931953
-for(q=0;q<170;++q){p=q/170
+for(q=0;q<300;++q){p=q/300
 o=i.cr()
 n=B.d.cK(0.1+p*0.9+(i.cr()-0.5)*0.05,0.05,1)
 m=i.cr()
@@ -57741,21 +57741,21 @@ f=A.b5()
 f.skl(A.a62(B.j,g,A.d([B.i.dL(0.95),B.ft.dL(0.5),B.ft.dL(0)],s),null))
 f.z=B.Di
 a.jA(B.j,g,f)
-i=e*0.11
+i=e*0.17
 f=i*2
 f=A.a6C(B.j,f*0.42,f)
 g=A.b5()
 g.b=B.aS
-g.c=e*0.035
+g.c=e*0.05
 g.skl(A.a62(B.j,i*1.2,A.d([B.ft,B.i,B.y3],s),B.Az))
 g.z=B.Dh
 a.pV(f,g)
-h=e*0.05
+h=e*0.075
 g=h*2.3
 g=A.a6C(B.j,g*0.42,g)
 f=A.b5()
 f.b=B.aS
-f.c=Math.max(1.2,e*0.006)
+f.c=Math.max(1.5,e*0.01)
 f.r=B.i.dL(0.9).gv()
 f.z=B.Dj
 a.pV(g,f)
@@ -57771,13 +57771,13 @@ am(){return new A.Fx(B.j,null,null)}}
 A.Fx.prototype={
 U5(a){var s,r,q,p,o,n,m,l=this.f
 if(l!=null)return l
-s=a.a/2
-r=a.b/2
-q=Math.min(660,Math.max(120,Math.min(s,r)-12-56))
-p=Math.max(0,s-q-56-12)
-o=Math.max(0,r-q-56-12)
-n=12+B.b3.cr()*p
-m=12+B.b3.cr()*o
+s=a.a
+r=a.b
+q=Math.min(660,Math.max(160,Math.min(s,r)*0.85))
+p=Math.max(12,s/2-q-56)
+o=Math.max(12,r/2-q-56)
+n=12+B.b3.cr()*(p-12)
+m=12+B.b3.cr()*(o-12)
 return this.f=new A.A(n,m,n+q,m+q)},
 aF(){var s,r,q,p,o=this,n=null
 o.b2()
@@ -57832,7 +57832,7 @@ s=this.a
 i.push(new A.ey(new A.a0y(s,this.c,k),l))
 s=s.e
 i.push(A.a5w(new A.l1(B.yR,A.abP(new A.zx(B.vJ,new A.CE(new A.a0z(),A.abG("Hello there!",A.aq3().$5$color$fontSize$fontWeight$letterSpacing$shadows(B.i,64,B.bO,2,A.d([new A.eN(B.jz.dL(0.75),B.j,6),new A.eN(B.jC.dL(0.45),B.j,14)],t.o5))),l),l),new A.z(s.a*-4,s.b*-4)),l),l,l))
-i.push(A.a6w(l,new A.C5(B.ce,B.cT,B.pg,B.cw,l,B.LM,l,0,A.d([A.aje(B.w,B.dm,B.zk,16,l,new A.a0A(),B.bN,16,l,"Reload",B.vb),B.GV,A.abG("Test-v0.20",A.aq2().$2$color$fontSize(B.w,12))],j),l),l,l,l,12,4,l))
+i.push(A.a6w(l,new A.C5(B.ce,B.cT,B.pg,B.cw,l,B.LM,l,0,A.d([A.aje(B.w,B.dm,B.zk,16,l,new A.a0A(),B.bN,16,l,"Reload",B.vb),B.GV,A.abG("Test-v0.21",A.aq2().$2$color$fontSize(B.w,12))],j),l),l,l,l,12,4,l))
 return A.XD(B.f5,i,B.ii)},
 $S:385}
 A.a0y.prototype={
