@@ -329,7 +329,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 21;
+  static const int editCount = 22;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -352,6 +352,19 @@ class _GreetingPageState extends State<GreetingPage>
       desiredSize,
       max(160.0, min(screenSize.width, screenSize.height) * 0.85),
     );
+
+    // On phone-width screens, park it centered in the top half instead of
+    // randomly in the top-left — there isn't enough width for it to roam.
+    const mobileBreakpoint = 600.0;
+    if (screenSize.width < mobileBreakpoint) {
+      final rect = Rect.fromCenter(
+        center: Offset(screenSize.width / 2, screenSize.height / 4),
+        width: galaxySize,
+        height: galaxySize,
+      );
+      _galaxyRect = rect;
+      return rect;
+    }
 
     final random = Random();
     final maxLeft = max(
