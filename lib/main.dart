@@ -269,6 +269,50 @@ class _GalaxyPainter extends CustomPainter {
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
     );
 
+    // A black hole at the very center: a glowing accretion ring, a thin
+    // bright photon ring hugging the shadow's edge, then the black shadow
+    // itself on top. The ring is squashed the same as the disc so it reads
+    // as viewed at the same tilt.
+    final ringOuter = maxR * 0.11;
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset.zero,
+        width: ringOuter * 2,
+        height: ringOuter * 2 * _tilt,
+      ),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = maxR * 0.035
+        ..shader = ui.Gradient.radial(Offset.zero, ringOuter, [
+          Colors.white,
+          const Color(0xFFFFC978),
+          const Color(0xFFFF6A3D).withValues(alpha: 0.0),
+        ], const [0.0, 0.55, 1.0])
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+
+    final holeR = maxR * 0.05;
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset.zero,
+        width: holeR * 2.3,
+        height: holeR * 2.3 * _tilt,
+      ),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = max(1.2, maxR * 0.006)
+        ..color = Colors.white.withValues(alpha: 0.9)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
+    );
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset.zero,
+        width: holeR * 2,
+        height: holeR * 2 * _tilt,
+      ),
+      Paint()..color = const Color(0xFF05010A),
+    );
+
     canvas.restore();
   }
 
@@ -285,10 +329,47 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 18;
+  static const int editCount = 19;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
+
+  // Picked once (lazily, as soon as the screen size is known) so the
+  // galaxy sits in one random spot per app load instead of jumping
+  // around on every animation frame.
+  Rect? _galaxyRect;
+
+  Rect _resolveGalaxyRect(Size screenSize) {
+    final cached = _galaxyRect;
+    if (cached != null) return cached;
+
+    final quadrantW = screenSize.width / 2;
+    final quadrantH = screenSize.height / 2;
+    const edgeMargin = 12.0;
+    const centerBuffer = 56.0; // stay clear of the central title
+    const desiredSize = 660.0;
+    final maxFit = max(
+      120.0,
+      min(quadrantW, quadrantH) - edgeMargin - centerBuffer,
+    );
+    final galaxySize = min(desiredSize, maxFit);
+
+    final random = Random();
+    final maxLeftOffset = max(
+      0.0,
+      quadrantW - galaxySize - centerBuffer - edgeMargin,
+    );
+    final maxTopOffset = max(
+      0.0,
+      quadrantH - galaxySize - centerBuffer - edgeMargin,
+    );
+    final left = edgeMargin + random.nextDouble() * maxLeftOffset;
+    final top = edgeMargin + random.nextDouble() * maxTopOffset;
+
+    final rect = Rect.fromLTWH(left, top, galaxySize, galaxySize);
+    _galaxyRect = rect;
+    return rect;
+  }
 
   static final List<_Star> _stars = List.generate(175, (index) {
     final random = Random();
@@ -357,17 +438,22 @@ class _GreetingPageState extends State<GreetingPage>
                     Positioned.fill(
                       child: CustomPaint(painter: _CometsPainter(_comets, t)),
                     ),
-                    Positioned(
-                      top: 12,
-                      left: 12,
-                      width: 330,
-                      height: 330,
-                      child: CustomPaint(
-                        painter: _GalaxyPainter(
-                          _galaxyParticles,
-                          t * 2 * pi / 45,
-                        ),
-                      ),
+                    Builder(
+                      builder: (context) {
+                        final rect = _resolveGalaxyRect(size);
+                        return Positioned(
+                          left: rect.left,
+                          top: rect.top,
+                          width: rect.width,
+                          height: rect.height,
+                          child: CustomPaint(
+                            painter: _GalaxyPainter(
+                              _galaxyParticles,
+                              t * 2 * pi / 45,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                     Center(
                       child: Padding(
