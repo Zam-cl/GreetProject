@@ -283,11 +283,11 @@ class _GalaxyPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = maxR * 0.035
-        ..shader = ui.Gradient.radial(Offset.zero, ringOuter, [
+        ..shader = ui.Gradient.radial(Offset.zero, ringOuter * 1.2, [
+          const Color(0xFFFFE9B3),
           Colors.white,
-          const Color(0xFFFFC978),
-          const Color(0xFFFF6A3D).withValues(alpha: 0.0),
-        ], const [0.0, 0.55, 1.0])
+          const Color(0xFFFF9D5C),
+        ], const [0.0, 0.75, 1.0])
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
     );
 
@@ -329,7 +329,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 19;
+  static const int editCount = 20;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -516,7 +516,7 @@ class _GreetingPageState extends State<GreetingPage>
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            'Test-v$editCount',
+                            'Test-v0.$editCount',
                             style: GoogleFonts.comicNeue(
                               fontSize: 12,
                               color: Colors.white70,
