@@ -242,11 +242,13 @@ class _GalaxyPainter extends CustomPainter {
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
     );
 
-    canvas.rotate(rotation);
-
+    // Spin the stars within the disc plane first, then squash the whole
+    // field vertically — keeps a fixed viewing tilt instead of the disc
+    // itself tumbling as it rotates.
     for (final p in particles) {
-      final x = cos(p.angle) * p.radius * maxR;
-      final y = sin(p.angle) * p.radius * maxR * _tilt;
+      final angle = p.angle + rotation;
+      final x = cos(angle) * p.radius * maxR;
+      final y = sin(angle) * p.radius * maxR * _tilt;
       canvas.drawCircle(
         Offset(x, y),
         p.size,
@@ -282,7 +284,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 15;
+  static const int editCount = 16;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
