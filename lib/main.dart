@@ -162,6 +162,117 @@ class _CometsPainter extends CustomPainter {
   bool shouldRepaint(covariant _CometsPainter oldDelegate) => true;
 }
 
+class _GalaxyParticle {
+  const _GalaxyParticle({
+    required this.radius,
+    required this.angle,
+    required this.size,
+    required this.color,
+  });
+
+  final double radius; // normalized 0..1 from the galaxy's center
+  final double angle; // radians, position along its spiral arm
+  final double size;
+  final Color color;
+}
+
+List<_GalaxyParticle> _buildGalaxyParticles() {
+  final particles = <_GalaxyParticle>[];
+  const armCount = 4;
+  const perArm = 70;
+  final random = Random(42);
+  for (var arm = 0; arm < armCount; arm++) {
+    final armOffset = arm * (2 * pi / armCount);
+    for (var i = 0; i < perArm; i++) {
+      final tNorm = i / perArm;
+      final baseRadius = 0.1 + tNorm * 0.9;
+      final winding = tNorm * 2.4 * 2 * pi;
+      final jitterAngle =
+          (random.nextDouble() - 0.5) * 0.5 * (1 - tNorm * 0.4);
+      final jitterRadius = (random.nextDouble() - 0.5) * 0.08;
+      final r = (baseRadius + jitterRadius).clamp(0.05, 1.0);
+      final angle = armOffset + winding + jitterAngle;
+      final roll = random.nextDouble();
+      final Color color;
+      if (r < 0.22) {
+        color = const Color(0xFFFFF6D8); // warm glow near the core
+      } else if (roll < 0.12) {
+        color = const Color(0xFFFF8FD0); // pink nebula knot
+      } else if (roll < 0.22) {
+        color = const Color(0xFFB388FF); // purple haze
+      } else {
+        color = const Color(0xFFBEE3FF); // blue-white young stars
+      }
+      final size = roll < 0.12
+          ? 2.6 + random.nextDouble() * 1.6
+          : 1.0 + random.nextDouble() * 1.8;
+      particles.add(
+        _GalaxyParticle(radius: r, angle: angle, size: size, color: color),
+      );
+    }
+  }
+  return particles;
+}
+
+class _GalaxyPainter extends CustomPainter {
+  _GalaxyPainter(this.particles, this.rotation);
+
+  final List<_GalaxyParticle> particles;
+  final double rotation;
+
+  // Squash the disc vertically so it reads as a tilted spiral, like a real
+  // galaxy seen at an angle rather than flat-on.
+  static const double _tilt = 0.42;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final maxR = min(size.width, size.height) / 2;
+
+    canvas.save();
+    canvas.translate(size.width / 2, size.height / 2);
+
+    canvas.drawCircle(
+      Offset.zero,
+      maxR * 1.05,
+      Paint()
+        ..shader = ui.Gradient.radial(Offset.zero, maxR * 1.05, [
+          const Color(0xFF7F5CFF).withValues(alpha: 0.18),
+          const Color(0xFF7F5CFF).withValues(alpha: 0.0),
+        ])
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
+    );
+
+    canvas.rotate(rotation);
+
+    for (final p in particles) {
+      final x = cos(p.angle) * p.radius * maxR;
+      final y = sin(p.angle) * p.radius * maxR * _tilt;
+      canvas.drawCircle(
+        Offset(x, y),
+        p.size,
+        Paint()..color = p.color.withValues(alpha: 0.85),
+      );
+    }
+
+    canvas.drawCircle(
+      Offset.zero,
+      maxR * 0.16,
+      Paint()
+        ..shader = ui.Gradient.radial(Offset.zero, maxR * 0.16, [
+          Colors.white.withValues(alpha: 0.95),
+          const Color(0xFFFFE9B3).withValues(alpha: 0.5),
+          const Color(0xFFFFE9B3).withValues(alpha: 0.0),
+        ])
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+    );
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _GalaxyPainter oldDelegate) => true;
+}
+
 class GreetingPage extends StatefulWidget {
   const GreetingPage({super.key});
 
@@ -171,7 +282,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 14;
+  static const int editCount = 15;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -186,6 +297,8 @@ class _GreetingPageState extends State<GreetingPage>
       speed: 0.15 + random.nextDouble() * 0.35,
     );
   });
+
+  static final List<_GalaxyParticle> _galaxyParticles = _buildGalaxyParticles();
 
   static final List<_Comet> _comets = List.generate(3, (index) {
     final random = Random();
@@ -248,36 +361,53 @@ class _GreetingPageState extends State<GreetingPage>
                           offset: Offset(_parallax.dx * -4, _parallax.dy * -4),
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
-                            child: ShaderMask(
-                              shaderCallback: (bounds) =>
-                                  const LinearGradient(
-                                    colors: [
-                                      Color(0xFF7F5CFF),
-                                      Color(0xFFD86FFF),
-                                      Color(0xFF5CE1FF),
-                                    ],
-                                  ).createShader(bounds),
-                              child: Text(
-                                'Hello there!',
-                                style: GoogleFonts.orbitron(
-                                  fontSize: 64,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  letterSpacing: 2,
-                                  shadows: [
-                                    Shadow(
-                                      color: const Color(0xFFB388FF)
-                                          .withValues(alpha: 0.75),
-                                      blurRadius: 6,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 150,
+                                  height: 150,
+                                  child: CustomPaint(
+                                    painter: _GalaxyPainter(
+                                      _galaxyParticles,
+                                      t * 2 * pi / 45,
                                     ),
-                                    Shadow(
-                                      color: const Color(0xFF5CE1FF)
-                                          .withValues(alpha: 0.45),
-                                      blurRadius: 14,
-                                    ),
-                                  ],
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(width: 28),
+                                ShaderMask(
+                                  shaderCallback: (bounds) =>
+                                      const LinearGradient(
+                                        colors: [
+                                          Color(0xFF7F5CFF),
+                                          Color(0xFFD86FFF),
+                                          Color(0xFF5CE1FF),
+                                        ],
+                                      ).createShader(bounds),
+                                  child: Text(
+                                    'Hello there!',
+                                    style: GoogleFonts.orbitron(
+                                      fontSize: 64,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                      letterSpacing: 2,
+                                      shadows: [
+                                        Shadow(
+                                          color: const Color(0xFFB388FF)
+                                              .withValues(alpha: 0.75),
+                                          blurRadius: 6,
+                                        ),
+                                        Shadow(
+                                          color: const Color(0xFF5CE1FF)
+                                              .withValues(alpha: 0.45),
+                                          blurRadius: 14,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
