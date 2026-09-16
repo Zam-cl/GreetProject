@@ -349,7 +349,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 24;
+  static const int editCount = 25;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -417,6 +417,7 @@ class _GreetingPageState extends State<GreetingPage>
   // The ambient halo fades out while dragging (so it doesn't look like the
   // cursor itself is glowing) and eases back in once you let go.
   double _haloOpacity = 1.0;
+  double? _dragReleasedAt;
 
   void _ensureGalaxyPhysics(Size screenSize) {
     if (_galaxyTarget != null) return;
@@ -445,9 +446,22 @@ class _GreetingPageState extends State<GreetingPage>
       lag[i] = Offset.lerp(lag[i], target, factor)!;
     }
 
-    final haloTarget = _draggingGalaxy ? 0.0 : 1.0;
-    final haloFactor = 1 - exp(-dt / 0.35);
-    _haloOpacity = _haloOpacity + (haloTarget - _haloOpacity) * haloFactor;
+    if (_draggingGalaxy) {
+      final haloFactor = 1 - exp(-dt / 0.35);
+      _haloOpacity += (0.0 - _haloOpacity) * haloFactor;
+    } else {
+      // Wait a beat after letting go before the glow starts creeping back,
+      // then bring it up slowly rather than snapping straight to full.
+      const fadeInDelay = 0.7;
+      final releasedAt = _dragReleasedAt;
+      final sinceRelease = releasedAt == null
+          ? double.infinity
+          : t - releasedAt;
+      if (sinceRelease >= fadeInDelay) {
+        final haloFactor = 1 - exp(-dt / 1.4);
+        _haloOpacity += (1.0 - _haloOpacity) * haloFactor;
+      }
+    }
   }
 
   void _onGalaxyPointerDown(PointerDownEvent event) {
@@ -467,6 +481,9 @@ class _GreetingPageState extends State<GreetingPage>
   }
 
   void _onGalaxyPointerUp(PointerEvent event) {
+    if (_draggingGalaxy) {
+      _dragReleasedAt = _lastGalaxyT;
+    }
     _draggingGalaxy = false;
   }
 
