@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:web/web.dart' as web;
 
 void main() {
   runApp(const MyApp());
@@ -284,7 +285,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 16;
+  static const int editCount = 17;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -356,6 +357,18 @@ class _GreetingPageState extends State<GreetingPage>
                     Positioned.fill(
                       child: CustomPaint(painter: _CometsPainter(_comets, t)),
                     ),
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      width: 110,
+                      height: 110,
+                      child: CustomPaint(
+                        painter: _GalaxyPainter(
+                          _galaxyParticles,
+                          t * 2 * pi / 45,
+                        ),
+                      ),
+                    ),
                     Center(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -363,67 +376,67 @@ class _GreetingPageState extends State<GreetingPage>
                           offset: Offset(_parallax.dx * -4, _parallax.dy * -4),
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                SizedBox(
-                                  width: 150,
-                                  height: 150,
-                                  child: CustomPaint(
-                                    painter: _GalaxyPainter(
-                                      _galaxyParticles,
-                                      t * 2 * pi / 45,
+                            child: ShaderMask(
+                              shaderCallback: (bounds) =>
+                                  const LinearGradient(
+                                    colors: [
+                                      Color(0xFF7F5CFF),
+                                      Color(0xFFD86FFF),
+                                      Color(0xFF5CE1FF),
+                                    ],
+                                  ).createShader(bounds),
+                              child: Text(
+                                'Hello there!',
+                                style: GoogleFonts.orbitron(
+                                  fontSize: 64,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 2,
+                                  shadows: [
+                                    Shadow(
+                                      color: const Color(0xFFB388FF)
+                                          .withValues(alpha: 0.75),
+                                      blurRadius: 6,
                                     ),
-                                  ),
-                                ),
-                                const SizedBox(width: 28),
-                                ShaderMask(
-                                  shaderCallback: (bounds) =>
-                                      const LinearGradient(
-                                        colors: [
-                                          Color(0xFF7F5CFF),
-                                          Color(0xFFD86FFF),
-                                          Color(0xFF5CE1FF),
-                                        ],
-                                      ).createShader(bounds),
-                                  child: Text(
-                                    'Hello there!',
-                                    style: GoogleFonts.orbitron(
-                                      fontSize: 64,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                      letterSpacing: 2,
-                                      shadows: [
-                                        Shadow(
-                                          color: const Color(0xFFB388FF)
-                                              .withValues(alpha: 0.75),
-                                          blurRadius: 6,
-                                        ),
-                                        Shadow(
-                                          color: const Color(0xFF5CE1FF)
-                                              .withValues(alpha: 0.45),
-                                          blurRadius: 14,
-                                        ),
-                                      ],
+                                    Shadow(
+                                      color: const Color(0xFF5CE1FF)
+                                          .withValues(alpha: 0.45),
+                                      blurRadius: 14,
                                     ),
-                                  ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
                     Positioned(
-                      top: 8,
+                      top: 4,
                       right: 12,
-                      child: Text(
-                        'Test-v$editCount',
-                        style: GoogleFonts.comicNeue(
-                          fontSize: 12,
-                          color: Colors.white70,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            onPressed: () => web.window.location.reload(),
+                            icon: const Icon(Icons.refresh),
+                            iconSize: 16,
+                            color: Colors.white70,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            visualDensity: VisualDensity.compact,
+                            splashRadius: 16,
+                            tooltip: 'Reload',
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Test-v$editCount',
+                            style: GoogleFonts.comicNeue(
+                              fontSize: 12,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
