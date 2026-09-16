@@ -19354,12 +19354,13 @@ _.a=a
 _.b=b
 _.c=c
 _.d=d},
-Fu:function Fu(a,b,c,d,e){var _=this
+Fu:function Fu(a,b,c,d,e,f){var _=this
 _.b=a
 _.c=b
 _.d=c
 _.e=d
-_.f=e},
+_.f=e
+_.r=f},
 qM:function qM(a){this.a=a},
 vs:function vs(a,b,c){var _=this
 _.d=$
@@ -19367,6 +19368,7 @@ _.e=a
 _.x=_.w=_.r=_.f=null
 _.y=!1
 _.z=0
+_.Q=1
 _.en$=b
 _.co$=c
 _.c=_.a=null},
@@ -57727,7 +57729,7 @@ p=q*1.05
 $.a1()
 o=A.b5()
 n=t.bk
-o.skl(A.a63(B.j,p,A.d([B.fu.dL(0.18),B.fu.dL(0)],n),null))
+o.skl(A.a63(B.j,p,A.d([B.fu.dL(0.18*a.r),B.fu.dL(0)],n),null))
 o.z=B.Dg
 a1.jA(B.j,p,o)
 a0.restore()
@@ -57793,16 +57795,19 @@ s=r.Ua(a)
 r.r=s.gaH()
 r.w=(s.c-s.a)/2
 r.x=A.be($.a59().length,s.gaH(),!1,t.o)},
-Vk(a){var s,r,q,p,o,n=this,m=n.x,l=n.r
-if(m==null||l==null)return
-s=n.z
+Vk(a){var s,r,q,p,o,n,m=this,l=m.x,k=m.r
+if(l==null||k==null)return
+s=m.z
 r=s===0?0:B.d.cB(a-s,0,0.1)
-n.z=a
+m.z=a
 if(r<=0)return
-for(s=m.length,q=-r,p=0;p<s;++p){o=Math.exp(q/(0.12+$.a59()[p].a*0.9))
-o=A.rQ(m[p],l,1-o)
+for(s=l.length,q=-r,p=0;p<s;++p){o=Math.exp(q/(0.12+$.a59()[p].a*0.9))
+o=A.rQ(l[p],k,1-o)
 o.toString
-m[p]=o}},
+l[p]=o}n=m.y?0:1
+s=Math.exp(q/0.35)
+q=m.Q
+m.Q=q+(n-q)*(1-s)},
 SX(a){var s=this,r=s.r,q=s.w
 if(r==null||q==null)return
 if(a.gcr().a2(0,r).gd_()<=q*1.3){s.y=!0
@@ -57870,10 +57875,10 @@ k=g.w
 k.toString
 j=g.r
 j.toString
-r.push(A.a6x(0,A.a5I(i,i,new A.Fu(q,p,h*2*3.141592653589793/45,k,j))))
+r.push(A.a6x(0,A.a5I(i,i,new A.Fu(q,p,h*2*3.141592653589793/45,k,j,g.Q))))
 g=g.e
 r.push(A.a5x(new A.l0(B.yR,A.abP(new A.zz(B.vJ,new A.CF(new A.a0z(),A.abG("Hello there!",A.aq2().$5$color$fontSize$fontWeight$letterSpacing$shadows(B.i,64,B.bO,2,A.d([new A.eM(B.jz.dL(0.75),B.j,6),new A.eM(B.jC.dL(0.45),B.j,14)],t.o5))),i),i),new A.z(g.a*-4,g.b*-4)),i),i,i))
-r.push(A.aaZ(i,new A.C6(B.ce,B.cT,B.pg,B.cw,i,B.LM,i,0,A.d([A.ajd(B.w,B.dm,B.zk,16,i,new A.a0A(),B.bN,16,i,"Reload",B.vb),B.GV,A.abG("Test-v0.23",A.aq1().$2$color$fontSize(B.w,12))],s),i),i,i,i,12,4,i))
+r.push(A.aaZ(i,new A.C6(B.ce,B.cT,B.pg,B.cw,i,B.LM,i,0,A.d([A.ajd(B.w,B.dm,B.zk,16,i,new A.a0A(),B.bN,16,i,"Reload",B.vb),B.GV,A.abG("Test-v0.24",A.aq1().$2$color$fontSize(B.w,12))],s),i),i,i,i,12,4,i))
 return A.XE(B.f5,r,B.ii)},
 $S:385}
 A.a0z.prototype={
