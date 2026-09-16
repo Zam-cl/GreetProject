@@ -216,10 +216,22 @@ List<_GalaxyParticle> _buildGalaxyParticles() {
 }
 
 class _GalaxyPainter extends CustomPainter {
-  _GalaxyPainter(this.particles, this.rotation);
+  _GalaxyPainter({
+    required this.particles,
+    required this.particleCenters,
+    required this.rotation,
+    required this.maxR,
+    required this.blackHoleCenter,
+  });
 
   final List<_GalaxyParticle> particles;
+  // Each particle's current on-screen center — normally all equal to
+  // blackHoleCenter, but they lag independently while the galaxy is being
+  // dragged, which is what produces the stretchy trailing swarm look.
+  final List<Offset> particleCenters;
   final double rotation;
+  final double maxR;
+  final Offset blackHoleCenter;
 
   // Squash the disc vertically so it reads as a tilted spiral, like a real
   // galaxy seen at an angle rather than flat-on.
@@ -227,11 +239,8 @@ class _GalaxyPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final maxR = min(size.width, size.height) / 2;
-
     canvas.save();
-    canvas.translate(size.width / 2, size.height / 2);
-
+    canvas.translate(blackHoleCenter.dx, blackHoleCenter.dy);
     canvas.drawCircle(
       Offset.zero,
       maxR * 1.05,
@@ -242,20 +251,27 @@ class _GalaxyPainter extends CustomPainter {
         ])
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
     );
+    canvas.restore();
 
     // Spin the stars within the disc plane first, then squash the whole
     // field vertically — keeps a fixed viewing tilt instead of the disc
-    // itself tumbling as it rotates.
-    for (final p in particles) {
+    // itself tumbling as it rotates. Each star orbits around its own
+    // (possibly lagging) center rather than a single shared point.
+    for (var i = 0; i < particles.length; i++) {
+      final p = particles[i];
       final angle = p.angle + rotation;
       final x = cos(angle) * p.radius * maxR;
       final y = sin(angle) * p.radius * maxR * _tilt;
+      final center = particleCenters[i];
       canvas.drawCircle(
-        Offset(x, y),
+        Offset(center.dx + x, center.dy + y),
         p.size,
         Paint()..color = p.color.withValues(alpha: 0.85),
       );
     }
+
+    canvas.save();
+    canvas.translate(blackHoleCenter.dx, blackHoleCenter.dy);
 
     canvas.drawCircle(
       Offset.zero,
@@ -329,7 +345,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 22;
+  static const int editCount = 23;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -381,6 +397,65 @@ class _GreetingPageState extends State<GreetingPage>
     final rect = Rect.fromLTWH(left, top, galaxySize, galaxySize);
     _galaxyRect = rect;
     return rect;
+  }
+
+  // Draggable galaxy: `_galaxyTarget` is the point every star eases toward
+  // — the pointer while dragging, or wherever you last let go. Stars near
+  // the core catch up almost instantly; outer arm stars lag behind, which
+  // is what gives a drag its stretchy, swarm-follow feel and makes the
+  // galaxy visibly re-gather once you stop moving it.
+  Offset? _galaxyTarget;
+  double? _galaxyMaxR;
+  List<Offset>? _particleLag;
+  bool _draggingGalaxy = false;
+  double _lastGalaxyT = 0;
+
+  void _ensureGalaxyPhysics(Size screenSize) {
+    if (_galaxyTarget != null) return;
+    final rect = _resolveGalaxyRect(screenSize);
+    _galaxyTarget = rect.center;
+    _galaxyMaxR = rect.width / 2;
+    _particleLag = List<Offset>.filled(
+      _galaxyParticles.length,
+      rect.center,
+      growable: false,
+    );
+  }
+
+  void _updateGalaxyPhysics(double t) {
+    final lag = _particleLag;
+    final target = _galaxyTarget;
+    if (lag == null || target == null) return;
+    final dt = _lastGalaxyT == 0 ? 0.0 : (t - _lastGalaxyT).clamp(0.0, 0.1);
+    _lastGalaxyT = t;
+    if (dt <= 0) return;
+    for (var i = 0; i < lag.length; i++) {
+      // Particles further out on the spiral (bigger `radius`) take longer
+      // to catch up, stretching the shape while the target keeps moving.
+      final tau = 0.12 + _galaxyParticles[i].radius * 0.9;
+      final factor = 1 - exp(-dt / tau);
+      lag[i] = Offset.lerp(lag[i], target, factor)!;
+    }
+  }
+
+  void _onGalaxyPointerDown(PointerDownEvent event) {
+    final target = _galaxyTarget;
+    final maxR = _galaxyMaxR;
+    if (target == null || maxR == null) return;
+    if ((event.localPosition - target).distance <= maxR * 1.3) {
+      _draggingGalaxy = true;
+      _galaxyTarget = event.localPosition;
+    }
+  }
+
+  void _onGalaxyPointerMove(PointerEvent event) {
+    if (_draggingGalaxy) {
+      _galaxyTarget = event.localPosition;
+    }
+  }
+
+  void _onGalaxyPointerUp(PointerEvent event) {
+    _draggingGalaxy = false;
   }
 
   static final List<_Star> _stars = List.generate(175, (index) {
@@ -438,11 +513,19 @@ class _GreetingPageState extends State<GreetingPage>
           final size = Size(constraints.maxWidth, constraints.maxHeight);
           return Listener(
             onPointerHover: (e) => _updateParallax(e.localPosition, size),
-            onPointerMove: (e) => _updateParallax(e.localPosition, size),
+            onPointerMove: (e) {
+              _updateParallax(e.localPosition, size);
+              _onGalaxyPointerMove(e);
+            },
+            onPointerDown: _onGalaxyPointerDown,
+            onPointerUp: _onGalaxyPointerUp,
+            onPointerCancel: _onGalaxyPointerUp,
             child: AnimatedBuilder(
               animation: _controller,
               builder: (context, _) {
                 final t = DateTime.now().millisecondsSinceEpoch / 1000.0;
+                _ensureGalaxyPhysics(size);
+                _updateGalaxyPhysics(t);
                 return Stack(
                   children: [
                     for (final star in _stars)
@@ -450,22 +533,16 @@ class _GreetingPageState extends State<GreetingPage>
                     Positioned.fill(
                       child: CustomPaint(painter: _CometsPainter(_comets, t)),
                     ),
-                    Builder(
-                      builder: (context) {
-                        final rect = _resolveGalaxyRect(size);
-                        return Positioned(
-                          left: rect.left,
-                          top: rect.top,
-                          width: rect.width,
-                          height: rect.height,
-                          child: CustomPaint(
-                            painter: _GalaxyPainter(
-                              _galaxyParticles,
-                              t * 2 * pi / 45,
-                            ),
-                          ),
-                        );
-                      },
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: _GalaxyPainter(
+                          particles: _galaxyParticles,
+                          particleCenters: _particleLag!,
+                          rotation: t * 2 * pi / 45,
+                          maxR: _galaxyMaxR!,
+                          blackHoleCenter: _galaxyTarget!,
+                        ),
+                      ),
                     ),
                     Center(
                       child: Padding(
