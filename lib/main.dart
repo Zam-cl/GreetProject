@@ -179,18 +179,18 @@ class _GalaxyParticle {
 
 List<_GalaxyParticle> _buildGalaxyParticles() {
   final particles = <_GalaxyParticle>[];
-  const armCount = 4;
-  const perArm = 70;
+  const armCount = 3;
+  const perArm = 170;
   final random = Random(42);
   for (var arm = 0; arm < armCount; arm++) {
     final armOffset = arm * (2 * pi / armCount);
     for (var i = 0; i < perArm; i++) {
       final tNorm = i / perArm;
       final baseRadius = 0.1 + tNorm * 0.9;
-      final winding = tNorm * 2.4 * 2 * pi;
+      final winding = tNorm * 2.7 * 2 * pi;
       final jitterAngle =
-          (random.nextDouble() - 0.5) * 0.5 * (1 - tNorm * 0.4);
-      final jitterRadius = (random.nextDouble() - 0.5) * 0.08;
+          (random.nextDouble() - 0.5) * 0.3 * (1 - tNorm * 0.4);
+      final jitterRadius = (random.nextDouble() - 0.5) * 0.05;
       final r = (baseRadius + jitterRadius).clamp(0.05, 1.0);
       final angle = armOffset + winding + jitterAngle;
       final roll = random.nextDouble();
@@ -285,7 +285,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 17;
+  static const int editCount = 18;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -360,8 +360,8 @@ class _GreetingPageState extends State<GreetingPage>
                     Positioned(
                       top: 12,
                       left: 12,
-                      width: 110,
-                      height: 110,
+                      width: 330,
+                      height: 330,
                       child: CustomPaint(
                         painter: _GalaxyPainter(
                           _galaxyParticles,
