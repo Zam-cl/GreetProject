@@ -180,7 +180,7 @@ class _GalaxyParticle {
 List<_GalaxyParticle> _buildGalaxyParticles() {
   final particles = <_GalaxyParticle>[];
   const armCount = 3;
-  const perArm = 170;
+  const perArm = 300;
   final random = Random(42);
   for (var arm = 0; arm < armCount; arm++) {
     final armOffset = arm * (2 * pi / armCount);
@@ -273,7 +273,7 @@ class _GalaxyPainter extends CustomPainter {
     // bright photon ring hugging the shadow's edge, then the black shadow
     // itself on top. The ring is squashed the same as the disc so it reads
     // as viewed at the same tilt.
-    final ringOuter = maxR * 0.11;
+    final ringOuter = maxR * 0.17;
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset.zero,
@@ -282,7 +282,7 @@ class _GalaxyPainter extends CustomPainter {
       ),
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = maxR * 0.035
+        ..strokeWidth = maxR * 0.05
         ..shader = ui.Gradient.radial(Offset.zero, ringOuter * 1.2, [
           const Color(0xFFFFE9B3),
           Colors.white,
@@ -291,7 +291,7 @@ class _GalaxyPainter extends CustomPainter {
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
     );
 
-    final holeR = maxR * 0.05;
+    final holeR = maxR * 0.075;
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset.zero,
@@ -300,7 +300,7 @@ class _GalaxyPainter extends CustomPainter {
       ),
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = max(1.2, maxR * 0.006)
+        ..strokeWidth = max(1.5, maxR * 0.01)
         ..color = Colors.white.withValues(alpha: 0.9)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
     );
@@ -329,7 +329,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 20;
+  static const int editCount = 21;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -343,28 +343,27 @@ class _GreetingPageState extends State<GreetingPage>
     final cached = _galaxyRect;
     if (cached != null) return cached;
 
-    final quadrantW = screenSize.width / 2;
-    final quadrantH = screenSize.height / 2;
     const edgeMargin = 12.0;
     const centerBuffer = 56.0; // stay clear of the central title
     const desiredSize = 660.0;
-    final maxFit = max(
-      120.0,
-      min(quadrantW, quadrantH) - edgeMargin - centerBuffer,
+    // Size off the full screen (not a quarter of it) so it stays big on
+    // narrow phones too; only shrinks below 660 if the screen is smaller.
+    final galaxySize = min(
+      desiredSize,
+      max(160.0, min(screenSize.width, screenSize.height) * 0.85),
     );
-    final galaxySize = min(desiredSize, maxFit);
 
     final random = Random();
-    final maxLeftOffset = max(
-      0.0,
-      quadrantW - galaxySize - centerBuffer - edgeMargin,
+    final maxLeft = max(
+      edgeMargin,
+      screenSize.width / 2 - galaxySize - centerBuffer,
     );
-    final maxTopOffset = max(
-      0.0,
-      quadrantH - galaxySize - centerBuffer - edgeMargin,
+    final maxTop = max(
+      edgeMargin,
+      screenSize.height / 2 - galaxySize - centerBuffer,
     );
-    final left = edgeMargin + random.nextDouble() * maxLeftOffset;
-    final top = edgeMargin + random.nextDouble() * maxTopOffset;
+    final left = edgeMargin + random.nextDouble() * (maxLeft - edgeMargin);
+    final top = edgeMargin + random.nextDouble() * (maxTop - edgeMargin);
 
     final rect = Rect.fromLTWH(left, top, galaxySize, galaxySize);
     _galaxyRect = rect;
