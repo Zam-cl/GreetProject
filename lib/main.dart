@@ -222,6 +222,7 @@ class _GalaxyPainter extends CustomPainter {
     required this.rotation,
     required this.maxR,
     required this.blackHoleCenter,
+    required this.haloOpacity,
   });
 
   final List<_GalaxyParticle> particles;
@@ -232,6 +233,9 @@ class _GalaxyPainter extends CustomPainter {
   final double rotation;
   final double maxR;
   final Offset blackHoleCenter;
+  // Fades out while dragging so the ambient glow doesn't look like it's
+  // stuck to the cursor; eases back in once the galaxy is at rest.
+  final double haloOpacity;
 
   // Squash the disc vertically so it reads as a tilted spiral, like a real
   // galaxy seen at an angle rather than flat-on.
@@ -246,7 +250,7 @@ class _GalaxyPainter extends CustomPainter {
       maxR * 1.05,
       Paint()
         ..shader = ui.Gradient.radial(Offset.zero, maxR * 1.05, [
-          const Color(0xFF7F5CFF).withValues(alpha: 0.18),
+          const Color(0xFF7F5CFF).withValues(alpha: 0.18 * haloOpacity),
           const Color(0xFF7F5CFF).withValues(alpha: 0.0),
         ])
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
@@ -345,7 +349,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 23;
+  static const int editCount = 24;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -410,6 +414,10 @@ class _GreetingPageState extends State<GreetingPage>
   bool _draggingGalaxy = false;
   double _lastGalaxyT = 0;
 
+  // The ambient halo fades out while dragging (so it doesn't look like the
+  // cursor itself is glowing) and eases back in once you let go.
+  double _haloOpacity = 1.0;
+
   void _ensureGalaxyPhysics(Size screenSize) {
     if (_galaxyTarget != null) return;
     final rect = _resolveGalaxyRect(screenSize);
@@ -436,6 +444,10 @@ class _GreetingPageState extends State<GreetingPage>
       final factor = 1 - exp(-dt / tau);
       lag[i] = Offset.lerp(lag[i], target, factor)!;
     }
+
+    final haloTarget = _draggingGalaxy ? 0.0 : 1.0;
+    final haloFactor = 1 - exp(-dt / 0.35);
+    _haloOpacity = _haloOpacity + (haloTarget - _haloOpacity) * haloFactor;
   }
 
   void _onGalaxyPointerDown(PointerDownEvent event) {
@@ -541,6 +553,7 @@ class _GreetingPageState extends State<GreetingPage>
                           rotation: t * 2 * pi / 45,
                           maxR: _galaxyMaxR!,
                           blackHoleCenter: _galaxyTarget!,
+                          haloOpacity: _haloOpacity,
                         ),
                       ),
                     ),
