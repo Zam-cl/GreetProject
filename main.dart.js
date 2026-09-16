@@ -19320,16 +19320,16 @@ j=i}s.JG(new A.nK(p,B.Du,o,j,h))
 s.zk()},
 ans(){var s,r,q,p,o,n,m,l,k,j=A.d([],t.ty),i=new A.w1()
 i.rV(42)
-for(s=0;s<4;++s){r=s*1.5707963267948966
-for(q=0;q<70;++q){p=q/70
+for(s=0;s<3;++s){r=s*2.0943951023931953
+for(q=0;q<170;++q){p=q/170
 o=i.cM()
-n=B.d.cJ(0.1+p*0.9+(i.cM()-0.5)*0.08,0.05,1)
+n=B.d.cJ(0.1+p*0.9+(i.cM()-0.5)*0.05,0.05,1)
 m=i.cM()
 if(n<0.22)l=B.xJ
 else if(m<0.12)l=B.xQ
 else l=m<0.22?B.jz:B.xD
 k=m<0.12?2.6+i.cM()*1.6:1+i.cM()*1.8
-j.push(new A.Fu(n,r+p*2.4*2*3.141592653589793+(o-0.5)*0.5*(1-p*0.4),k,l))}}return j},
+j.push(new A.Fu(n,r+p*2.7*2*3.141592653589793+(o-0.5)*0.3*(1-p*0.4),k,l))}}return j},
 AE:function AE(a){this.a=a},
 or:function or(a,b,c,d,e){var _=this
 _.a=a
@@ -57787,10 +57787,10 @@ n=new A.w1()
 n.rV(p.a*97+B.d.hH(o)*131071)
 m=p.b
 i.push(new A.n9(n.cM()*r.b,n.cM()*r.d,l,l,l,l,A.a9j(l,new A.eZ(p.c.e8(1-Math.abs(2*(o-Math.floor(o))-1)),l,l,l,l,l,B.fc),m,l,l,m),l))}i.push(A.aaX(0,A.a5G(l,l,new A.Eg($.afH(),k))))
-i.push(A.a6u(l,A.a5G(l,l,new A.Ft($.afI(),k*2*3.141592653589793/45)),110,l,12,l,12,110))
+i.push(A.a6u(l,A.a5G(l,l,new A.Ft($.afI(),k*2*3.141592653589793/45)),330,l,12,l,12,330))
 s=this.a.e
 i.push(A.a5v(new A.l_(B.yP,A.abN(new A.zx(B.vJ,new A.CE(new A.a0y(),A.abE("Hello there!",A.aq1().$5$color$fontSize$fontWeight$letterSpacing$shadows(B.i,64,B.bO,2,A.d([new A.eM(B.jz.e8(0.75),B.j,6),new A.eM(B.jC.e8(0.45),B.j,14)],t.o5))),l),l),new A.z(s.a*-4,s.b*-4)),l),l,l))
-i.push(A.a6u(l,new A.C5(B.ce,B.cT,B.pg,B.cw,l,B.LH,l,0,A.d([A.ajc(B.w,B.dl,B.zi,16,l,new A.a0z(),B.bN,16,l,"Reload",B.vb),B.GQ,A.abE("Test-v17",A.aq0().$2$color$fontSize(B.w,12))],j),l),l,l,l,12,4,l))
+i.push(A.a6u(l,new A.C5(B.ce,B.cT,B.pg,B.cw,l,B.LH,l,0,A.d([A.ajc(B.w,B.dl,B.zi,16,l,new A.a0z(),B.bN,16,l,"Reload",B.vb),B.GQ,A.abE("Test-v18",A.aq0().$2$color$fontSize(B.w,12))],j),l),l,l,l,12,4,l))
 return A.XD(B.f4,i,B.ig)},
 $S:385}
 A.a0y.prototype={
