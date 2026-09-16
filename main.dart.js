@@ -54217,32 +54217,31 @@ b.delete()}},
 ih(a){return!0}}
 A.E7.prototype={}
 A.E6.prototype={
-aF(a,b){var s,r,q,p,o,n,m,l,k=b.a,j=b.b,i=Math.min(k,j)/2,h=a.a
-J.ah(h.save())
-h.translate(k/2,j/2)
-j=i*1.05
+aF(a,b){var s,r,q,p,o,n,m,l,k,j,i=b.a,h=b.b,g=Math.min(i,h)/2,f=a.a
+J.ah(f.save())
+f.translate(i/2,h/2)
+h=g*1.05
 $.a3()
-k=A.ba()
+i=A.ba()
 s=t.bk
-k.sl0(A.a6G(B.k,j,A.d([B.eZ.dI(0.18),B.eZ.dI(0)],s)))
-k.z=B.Cm
-a.m9(B.k,j,k)
-h.rotate(this.c*180/3.141592653589793,0,0)
-for(k=this.b,j=k.length,r=0;r<k.length;k.length===j||(0,A.p)(k),++r){q=k[r]
-p=q.b
-o=Math.cos(p)
-n=q.a
-p=Math.sin(p)
-m=new A.fa(B.b1,B.an,B.bP,B.aR)
-m.r=q.d.dI(0.85).gu()
-l=m.cf()
-h.drawCircle(o*n*i,p*n*i*0.42,q.c,l)
-l.delete()}k=i*0.16
-j=A.ba()
-j.sl0(A.a6G(B.k,k,A.d([B.i.dI(0.95),B.iR.dI(0.5),B.iR.dI(0)],s)))
-j.z=B.Cn
-a.m9(B.k,k,j)
-h.restore()},
+i.sl0(A.a6G(B.k,h,A.d([B.eZ.dI(0.18),B.eZ.dI(0)],s)))
+i.z=B.Cm
+a.m9(B.k,h,i)
+for(i=this.b,h=i.length,r=this.c,q=0;q<i.length;i.length===h||(0,A.p)(i),++q){p=i[q]
+o=p.b+r
+n=Math.cos(o)
+m=p.a
+l=Math.sin(o)
+k=new A.fa(B.b1,B.an,B.bP,B.aR)
+k.r=p.d.dI(0.85).gu()
+j=k.cf()
+f.drawCircle(n*m*g,l*m*g*0.42,p.c,j)
+j.delete()}i=g*0.16
+h=A.ba()
+h.sl0(A.a6G(B.k,i,A.d([B.i.dI(0.95),B.iR.dI(0.5),B.iR.dI(0)],s)))
+h.z=B.Cn
+a.m9(B.k,i,h)
+f.restore()},
 ih(a){return!0}}
 A.pO.prototype={
 au(){return new A.Ea(B.k,null,null)}}
@@ -54298,7 +54297,7 @@ m=p.b
 i.push(new A.ml(n.ct()*r.b,n.ct()*r.d,l,l,l,l,A.aen(l,new A.fV(p.c.dI(1-Math.abs(2*(o-Math.floor(o))-1)),l,l,l,l,l,B.eJ),m,l,l,m),l))}i.push(A.agZ(0,A.a2y(l,l,new A.CZ($.acd(),k))))
 s=this.a.e
 i.push(A.ae0(new A.mj(B.y4,A.a8q(new A.yq(B.v4,new A.AS(B.bY,B.cx,B.oI,B.cc,l,B.KI,l,0,A.d([A.ai0(A.a2y(l,l,new A.E6($.ace(),k*2*3.141592653589793/45)),150,150),B.FY,new A.Bq(new A.YP(),A.a8j("Hello there!",A.amy().$5$color$fontSize$fontWeight$letterSpacing$shadows(B.i,64,B.bw,2,A.d([new A.en(B.j1.dI(0.75),B.k,6),new A.en(B.j4.dI(0.45),B.k,14)],t.o5))),l)],j),l),l),new A.B(s.a*-4,s.b*-4)),l),l,l))
-i.push(A.a7C(l,A.a8j("Test-v15",A.amx().$2$color$fontSize(B.y,12)),l,l,l,12,8,l))
+i.push(A.a7C(l,A.a8j("Test-v16",A.amx().$2$color$fontSize(B.y,12)),l,l,l,12,8,l))
 return A.Vz(B.ey,i,B.hM)},
 $S:330}
 A.YP.prototype={
