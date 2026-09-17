@@ -456,6 +456,69 @@ class _GalaxyPainter extends CustomPainter {
   bool shouldRepaint(covariant _GalaxyPainter oldDelegate) => true;
 }
 
+// Drawn instead of `_GalaxyPainter` while the galaxy is mid-supernova: every
+// star flies straight outward from where the black hole was at the moment
+// of detonation, behind a blinding flash, all fading out together.
+class _GalaxyExplosionPainter extends CustomPainter {
+  _GalaxyExplosionPainter({
+    required this.particles,
+    required this.velocities,
+    required this.center,
+    required this.startTime,
+    required this.t,
+    required this.maxR,
+  });
+
+  final List<_GalaxyParticle> particles;
+  final List<Offset> velocities; // px/s outward velocity per particle
+  final Offset center;
+  final double startTime;
+  final double t;
+  final double maxR;
+
+  static const double duration = 1.6;
+  static const double _flashDuration = 0.3;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final elapsed = (t - startTime).clamp(0.0, duration);
+
+    final flashT = (elapsed / _flashDuration).clamp(0.0, 1.0);
+    if (flashT < 1) {
+      final flashR = maxR * (0.3 + 1.4 * flashT);
+      canvas.drawCircle(
+        center,
+        flashR,
+        Paint()
+          ..shader = ui.Gradient.radial(center, flashR, [
+            Colors.white.withValues(alpha: (1 - flashT) * 0.9),
+            const Color(0xFFFFD9A0).withValues(alpha: (1 - flashT) * 0.4),
+            const Color(0xFFFFD9A0).withValues(alpha: 0.0),
+          ])
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20),
+      );
+    }
+
+    final progress = elapsed / duration;
+    final fade = (1 - progress) * (1 - progress);
+    for (var i = 0; i < particles.length; i++) {
+      final pos = center + velocities[i] * elapsed;
+      final currentSize = (particles[i].size * (1.6 - progress)).clamp(
+        0.3,
+        double.infinity,
+      );
+      canvas.drawCircle(
+        pos,
+        currentSize,
+        Paint()..color = particles[i].color.withValues(alpha: fade),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _GalaxyExplosionPainter oldDelegate) => true;
+}
+
 class GreetingPage extends StatefulWidget {
   const GreetingPage({super.key});
 
@@ -465,7 +528,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 27;
+  static const int editCount = 28;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -478,15 +541,23 @@ class _GreetingPageState extends State<GreetingPage>
   final GlobalKey _titleKey = GlobalKey();
   final List<_Firework> _fireworks = [];
 
-  void _spawnFirework() {
+  // The title's current on-screen bounds, in the Stack's own coordinate
+  // space — used both to center firework bursts on it and to keep the
+  // galaxy from being placed on top of it.
+  Rect? _currentTitleRect() {
     final stageBox = _stageKey.currentContext?.findRenderObject() as RenderBox?;
     final titleBox = _titleKey.currentContext?.findRenderObject() as RenderBox?;
-    if (stageBox == null || titleBox == null) return;
+    if (stageBox == null || titleBox == null) return null;
     final topLeft = stageBox.globalToLocal(titleBox.localToGlobal(Offset.zero));
     final bottomRight = stageBox.globalToLocal(
       titleBox.localToGlobal(titleBox.size.bottomRight(Offset.zero)),
     );
-    final rect = Rect.fromPoints(topLeft, bottomRight);
+    return Rect.fromPoints(topLeft, bottomRight);
+  }
+
+  void _spawnFirework() {
+    final rect = _currentTitleRect();
+    if (rect == null) return;
     setState(
       () => _fireworks.add(
         _Firework(
@@ -498,53 +569,38 @@ class _GreetingPageState extends State<GreetingPage>
     );
   }
 
-  // Picked once (lazily, as soon as the screen size is known) so the
-  // galaxy sits in one random spot per app load instead of jumping
-  // around on every animation frame.
-  Rect? _galaxyRect;
-
-  Rect _resolveGalaxyRect(Size screenSize) {
-    final cached = _galaxyRect;
-    if (cached != null) return cached;
-
+  // Picks a random spot for the galaxy sized off the screen (not a quarter
+  // of it, so it stays big on narrow phones too), avoiding `avoidRect`
+  // (the title's bounds) when one is given. Used both for the very first
+  // placement and every time the galaxy reappears after exploding.
+  Rect _pickGalaxyRect(Size screenSize, {Rect? avoidRect}) {
     const edgeMargin = 12.0;
-    const centerBuffer = 56.0; // stay clear of the central title
     const desiredSize = 660.0;
-    // Size off the full screen (not a quarter of it) so it stays big on
-    // narrow phones too; only shrinks below 660 if the screen is smaller.
     final galaxySize = min(
       desiredSize,
       max(160.0, min(screenSize.width, screenSize.height) * 0.85),
     );
+    final halfSize = galaxySize / 2;
+    final rangeX = max(0.0, screenSize.width - galaxySize - edgeMargin * 2);
+    final rangeY = max(0.0, screenSize.height - galaxySize - edgeMargin * 2);
 
-    // On phone-width screens, park it centered in the top half instead of
-    // randomly in the top-left — there isn't enough width for it to roam.
-    const mobileBreakpoint = 600.0;
-    if (screenSize.width < mobileBreakpoint) {
-      final rect = Rect.fromCenter(
-        center: Offset(screenSize.width / 2, screenSize.height / 4),
+    final random = Random();
+    const avoidBuffer = 24.0;
+    var tries = 0;
+    Rect candidate;
+    do {
+      final cx = edgeMargin + halfSize + random.nextDouble() * rangeX;
+      final cy = edgeMargin + halfSize + random.nextDouble() * rangeY;
+      candidate = Rect.fromCenter(
+        center: Offset(cx, cy),
         width: galaxySize,
         height: galaxySize,
       );
-      _galaxyRect = rect;
-      return rect;
-    }
-
-    final random = Random();
-    final maxLeft = max(
-      edgeMargin,
-      screenSize.width / 2 - galaxySize - centerBuffer,
-    );
-    final maxTop = max(
-      edgeMargin,
-      screenSize.height / 2 - galaxySize - centerBuffer,
-    );
-    final left = edgeMargin + random.nextDouble() * (maxLeft - edgeMargin);
-    final top = edgeMargin + random.nextDouble() * (maxTop - edgeMargin);
-
-    final rect = Rect.fromLTWH(left, top, galaxySize, galaxySize);
-    _galaxyRect = rect;
-    return rect;
+      tries++;
+    } while (avoidRect != null &&
+        candidate.inflate(avoidBuffer).overlaps(avoidRect) &&
+        tries < 40);
+    return candidate;
   }
 
   // Draggable galaxy: `_galaxyTarget` is the point every star eases toward
@@ -557,15 +613,31 @@ class _GreetingPageState extends State<GreetingPage>
   List<Offset>? _particleLag;
   bool _draggingGalaxy = false;
   double _lastGalaxyT = 0;
+  double? _dragStartTime;
+  bool _galaxyPlacementScheduled = false;
 
   // The ambient halo fades out while dragging (so it doesn't look like the
   // cursor itself is glowing) and eases back in once you let go.
   double _haloOpacity = 1.0;
   double? _dragReleasedAt;
 
+  // Holding the drag too long makes the galaxy blow apart instead of just
+  // following the pointer; it stays gone for a beat, then reappears
+  // somewhere new.
+  static const double _dragExplodeThreshold = 2.2;
+  static const double _reappearDelay = 1.4;
+  bool _exploding = false;
+  double? _explodeStartTime;
+  Offset? _explodeCenter;
+  List<Offset>? _explodeVelocities;
+  bool _hidden = false;
+  double? _hiddenSince;
+
   void _ensureGalaxyPhysics(Size screenSize) {
     if (_galaxyTarget != null) return;
-    final rect = _resolveGalaxyRect(screenSize);
+    // Provisional placement so the painters have non-null values on the
+    // very first frame, before the title's real on-screen bounds are known.
+    final rect = _pickGalaxyRect(screenSize);
     _galaxyTarget = rect.center;
     _galaxyMaxR = rect.width / 2;
     _particleLag = List<Offset>.filled(
@@ -573,9 +645,80 @@ class _GreetingPageState extends State<GreetingPage>
       rect.center,
       growable: false,
     );
+
+    if (_galaxyPlacementScheduled) return;
+    _galaxyPlacementScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final titleRect = _currentTitleRect();
+      if (titleRect == null) return;
+      final refined = _pickGalaxyRect(screenSize, avoidRect: titleRect);
+      setState(() {
+        _galaxyTarget = refined.center;
+        _galaxyMaxR = refined.width / 2;
+        _particleLag = List<Offset>.filled(
+          _galaxyParticles.length,
+          refined.center,
+          growable: false,
+        );
+      });
+    });
   }
 
-  void _updateGalaxyPhysics(double t) {
+  void _triggerGalaxyExplosion(double t) {
+    final center = _galaxyTarget;
+    if (center == null) return;
+    final random = Random();
+    _explodeVelocities = List.generate(_galaxyParticles.length, (i) {
+      final angle = random.nextDouble() * 2 * pi;
+      final speed = 220 + random.nextDouble() * 420;
+      return Offset(cos(angle), sin(angle)) * speed;
+    });
+    _explodeCenter = center;
+    _explodeStartTime = t;
+    _exploding = true;
+    _draggingGalaxy = false;
+    _dragStartTime = null;
+  }
+
+  void _reappearGalaxy(Size screenSize, double t) {
+    final rect = _pickGalaxyRect(screenSize, avoidRect: _currentTitleRect());
+    _hidden = false;
+    _hiddenSince = null;
+    _galaxyTarget = rect.center;
+    _galaxyMaxR = rect.width / 2;
+    _particleLag = List<Offset>.filled(
+      _galaxyParticles.length,
+      rect.center,
+      growable: false,
+    );
+    // Reuse the drag-release halo fade-in so it eases back in gently
+    // instead of just popping into view at full brightness.
+    _haloOpacity = 0.0;
+    _dragReleasedAt = t;
+  }
+
+  void _updateGalaxyPhysics(double t, Size screenSize) {
+    if (_hidden) {
+      _lastGalaxyT = t;
+      final since = _hiddenSince;
+      if (since != null && t - since >= _reappearDelay) {
+        _reappearGalaxy(screenSize, t);
+      }
+      return;
+    }
+
+    if (_exploding) {
+      _lastGalaxyT = t;
+      final start = _explodeStartTime;
+      if (start != null && t - start >= _GalaxyExplosionPainter.duration) {
+        _exploding = false;
+        _hidden = true;
+        _hiddenSince = t;
+      }
+      return;
+    }
+
     final lag = _particleLag;
     final target = _galaxyTarget;
     if (lag == null || target == null) return;
@@ -593,6 +736,11 @@ class _GreetingPageState extends State<GreetingPage>
     if (_draggingGalaxy) {
       final haloFactor = 1 - exp(-dt / 0.35);
       _haloOpacity += (0.0 - _haloOpacity) * haloFactor;
+
+      final dragStart = _dragStartTime;
+      if (dragStart != null && t - dragStart >= _dragExplodeThreshold) {
+        _triggerGalaxyExplosion(t);
+      }
     } else {
       // Wait a beat after letting go before the glow starts creeping back,
       // then bring it up slowly rather than snapping straight to full.
@@ -609,12 +757,14 @@ class _GreetingPageState extends State<GreetingPage>
   }
 
   void _onGalaxyPointerDown(PointerDownEvent event) {
+    if (_hidden || _exploding) return;
     final target = _galaxyTarget;
     final maxR = _galaxyMaxR;
     if (target == null || maxR == null) return;
     if ((event.localPosition - target).distance <= maxR * 1.3) {
       _draggingGalaxy = true;
       _galaxyTarget = event.localPosition;
+      _dragStartTime = DateTime.now().millisecondsSinceEpoch / 1000.0;
     }
   }
 
@@ -629,6 +779,7 @@ class _GreetingPageState extends State<GreetingPage>
       _dragReleasedAt = _lastGalaxyT;
     }
     _draggingGalaxy = false;
+    _dragStartTime = null;
   }
 
   static final List<_Star> _stars = List.generate(175, (index) {
@@ -698,7 +849,7 @@ class _GreetingPageState extends State<GreetingPage>
               builder: (context, _) {
                 final t = DateTime.now().millisecondsSinceEpoch / 1000.0;
                 _ensureGalaxyPhysics(size);
-                _updateGalaxyPhysics(t);
+                _updateGalaxyPhysics(t, size);
                 _fireworks.removeWhere((fw) => fw.isDoneAt(t));
                 return Stack(
                   key: _stageKey,
@@ -708,18 +859,32 @@ class _GreetingPageState extends State<GreetingPage>
                     Positioned.fill(
                       child: CustomPaint(painter: _CometsPainter(_comets, t)),
                     ),
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: _GalaxyPainter(
-                          particles: _galaxyParticles,
-                          particleCenters: _particleLag!,
-                          rotation: t * 2 * pi / 45,
-                          maxR: _galaxyMaxR!,
-                          blackHoleCenter: _galaxyTarget!,
-                          haloOpacity: _haloOpacity,
+                    if (_exploding)
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: _GalaxyExplosionPainter(
+                            particles: _galaxyParticles,
+                            velocities: _explodeVelocities!,
+                            center: _explodeCenter!,
+                            startTime: _explodeStartTime!,
+                            t: t,
+                            maxR: _galaxyMaxR!,
+                          ),
+                        ),
+                      )
+                    else if (!_hidden)
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: _GalaxyPainter(
+                            particles: _galaxyParticles,
+                            particleCenters: _particleLag!,
+                            rotation: t * 2 * pi / 45,
+                            maxR: _galaxyMaxR!,
+                            blackHoleCenter: _galaxyTarget!,
+                            haloOpacity: _haloOpacity,
+                          ),
                         ),
                       ),
-                    ),
                     Center(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
