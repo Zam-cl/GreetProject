@@ -783,7 +783,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 37;
+  static const int editCount = 38;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -1415,11 +1415,14 @@ class _GreetingPageState extends State<GreetingPage>
   final Set<int> _wormholeCaptured = {};
 
   // Pulls a screen position toward any wormhole currently in its suck-in
-  // phase, stronger the closer the point already is and the further along
-  // the pull has gotten — this is what actually drags the real stars in,
-  // rather than just showing a separate effect near them. Reaches full pull
-  // well before the phase's nominal end (see `_Wormhole.captureFraction`),
-  // so stars visibly rush in fast instead of drifting for the whole window.
+  // phase — this is what actually drags the real stars in, rather than just
+  // showing a separate effect near them. Every star inside the influence
+  // radius fully reaches the center by the end of the capture window
+  // (`_Wormhole.captureFraction`); distance only staggers *when* a star
+  // starts moving (farther ones start a beat later), never how far it
+  // ultimately travels — capping the distance travelled by distance, as an
+  // earlier version did, made far stars stall partway and then snap back
+  // once the pull switched off instead of ever reaching the center.
   Offset? _wormholePulledPosition(_Star star, Offset basePos, double t) {
     Offset? result;
     const influenceRadius = 260.0;
@@ -1427,14 +1430,15 @@ class _GreetingPageState extends State<GreetingPage>
       final elapsed = t - w.startTime;
       if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
       final dist = (w.center - basePos).distance;
-      if (dist > influenceRadius || dist < 1) continue;
+      if (dist > influenceRadius) continue;
+      final delay = (dist / influenceRadius) * 0.35;
       final rawProgress =
           (elapsed / (_Wormhole.suckDuration * _Wormhole.captureFraction))
               .clamp(0.0, 1.0);
-      final eased = Curves.easeOutCubic.transform(rawProgress);
-      final pull = ((1 - dist / influenceRadius) * eased).clamp(0.0, 0.98);
-      result = Offset.lerp(result ?? basePos, w.center, pull);
-      if (pull > 0.9) {
+      final adjusted = ((rawProgress - delay) / (1 - delay)).clamp(0.0, 1.0);
+      final pull = Curves.easeOutCubic.transform(adjusted);
+      result = Offset.lerp(basePos, w.center, pull);
+      if (pull > 0.95) {
         _wormholeCaptured.add(star.seed);
       }
     }
