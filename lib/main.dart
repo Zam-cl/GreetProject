@@ -626,7 +626,7 @@ class _Wormhole {
   final double startTime;
   final List<_WormholeMote> motes;
 
-  static const double suckDuration = 1.0;
+  static const double suckDuration = 2.4;
   static const double flashDuration = 0.25;
   static const double burstDuration = 1.3;
   static const double totalDuration =
@@ -778,7 +778,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 35;
+  static const int editCount = 36;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
