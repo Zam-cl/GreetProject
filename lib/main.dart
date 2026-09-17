@@ -626,9 +626,13 @@ class _Wormhole {
   final double startTime;
   final List<_WormholeMote> motes;
 
-  static const double suckDuration = 2.4;
+  static const double suckDuration = 3.0;
   static const double flashDuration = 0.25;
   static const double burstDuration = 1.3;
+  // Everything gets pulled all the way in by this fraction of `suckDuration`
+  // — well before the phase actually ends — so the pull itself reads as
+  // fast, with the vortex just lingering, already full, until it detonates.
+  static const double captureFraction = 0.45;
   static const double totalDuration =
       suckDuration + flashDuration + burstDuration;
 
@@ -704,7 +708,8 @@ class _WormholePainter extends CustomPainter {
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
     );
 
-    final easeIn = progress * progress; // accelerating infall
+    final captureT = (progress / _Wormhole.captureFraction).clamp(0.0, 1.0);
+    final easeIn = Curves.easeOutCubic.transform(captureT);
     for (final m in w.motes) {
       final radius = m.startRadius * (1 - easeIn);
       // Spins faster the closer it gets to the center, like real infalling
@@ -778,7 +783,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 36;
+  static const int editCount = 37;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -1402,34 +1407,56 @@ class _GreetingPageState extends State<GreetingPage>
     );
   }
 
+  // Once a captured star has been pulled all the way onto a wormhole's
+  // center, it's treated as swallowed: it stays invisible until its own
+  // brightness cycle would have made it invisible anyway (the same instant
+  // it would normally teleport to a fresh spot), instead of popping back
+  // into view at the exact place the wormhole grabbed it from.
+  final Set<int> _wormholeCaptured = {};
+
   // Pulls a screen position toward any wormhole currently in its suck-in
   // phase, stronger the closer the point already is and the further along
   // the pull has gotten — this is what actually drags the real stars in,
-  // rather than just showing a separate effect near them.
-  Offset _applyWormholePull(Offset pos, double t) {
-    var result = pos;
+  // rather than just showing a separate effect near them. Reaches full pull
+  // well before the phase's nominal end (see `_Wormhole.captureFraction`),
+  // so stars visibly rush in fast instead of drifting for the whole window.
+  Offset? _wormholePulledPosition(_Star star, Offset basePos, double t) {
+    Offset? result;
     const influenceRadius = 260.0;
     for (final w in _wormholes) {
       final elapsed = t - w.startTime;
       if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
-      final dist = (w.center - result).distance;
+      final dist = (w.center - basePos).distance;
       if (dist > influenceRadius || dist < 1) continue;
-      final progress = (elapsed / _Wormhole.suckDuration).clamp(0.0, 1.0);
-      final pull = ((1 - dist / influenceRadius) * progress * progress).clamp(
-        0.0,
-        0.96,
-      );
-      result = Offset.lerp(result, w.center, pull)!;
+      final rawProgress =
+          (elapsed / (_Wormhole.suckDuration * _Wormhole.captureFraction))
+              .clamp(0.0, 1.0);
+      final eased = Curves.easeOutCubic.transform(rawProgress);
+      final pull = ((1 - dist / influenceRadius) * eased).clamp(0.0, 0.98);
+      result = Offset.lerp(result ?? basePos, w.center, pull);
+      if (pull > 0.9) {
+        _wormholeCaptured.add(star.seed);
+      }
     }
     return result;
   }
 
   Widget _buildStar(_Star star, double t, BoxConstraints constraints) {
+    if (_wormholeCaptured.contains(star.seed)) {
+      if (star.brightnessAt(t) < 0.05) {
+        _wormholeCaptured.remove(star.seed);
+      } else {
+        return const SizedBox.shrink();
+      }
+    }
+
     final basePos = Offset(
       star.positionAt(t).dx * constraints.maxWidth,
       star.positionAt(t).dy * constraints.maxHeight,
     );
-    final pos = _wormholes.isEmpty ? basePos : _applyWormholePull(basePos, t);
+    final pos = _wormholes.isEmpty
+        ? basePos
+        : (_wormholePulledPosition(star, basePos, t) ?? basePos);
     return Positioned(
       left: pos.dx,
       top: pos.dy,
