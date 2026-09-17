@@ -613,6 +613,7 @@ class _WormholeMote {
     required this.burstSpeed,
     required this.color,
     required this.size,
+    this.burstOnly = false,
   });
 
   final double startAngle; // radians, where it drifts in from
@@ -623,6 +624,12 @@ class _WormholeMote {
   final double burstSpeed; // px/s
   final Color color;
   final double size;
+  // True for motes added after the wormhole already started (see
+  // `_Wormhole.addCapturedColor`) — they skip the suck-in spiral (which is
+  // timed from the wormhole's own start, so a mote added partway through
+  // would otherwise jump straight to a mid-flight position) and only
+  // appear once the burst-out begins.
+  final bool burstOnly;
 }
 
 // A secret one-shot easter egg: hold a finger/click on empty sky (away from
@@ -637,6 +644,30 @@ class _Wormhole {
   final double startTime;
   final List<_WormholeMote> motes;
 
+  // Called whenever this wormhole actually swallows a piece of the galaxy
+  // or the title — adds a couple of burst-only motes in that piece's own
+  // color, so the debris flying back out visibly includes bits of whatever
+  // it just ate instead of only its own plain starlight palette.
+  void addCapturedColor(Color color) {
+    final random = Random();
+    final count = 1 + random.nextInt(2);
+    for (var i = 0; i < count; i++) {
+      final angle = random.nextDouble() * 2 * pi;
+      motes.add(
+        _WormholeMote(
+          startAngle: angle,
+          startRadius: 0,
+          spinRate: 0,
+          burstAngle: angle,
+          burstSpeed: 220 + random.nextDouble() * 380,
+          color: color,
+          size: 1.6 + random.nextDouble() * 2.4,
+          burstOnly: true,
+        ),
+      );
+    }
+  }
+
   static const double suckDuration = 3.0;
   static const double flashDuration = 0.25;
   static const double burstDuration = 1.3;
@@ -649,7 +680,7 @@ class _Wormhole {
   // Shared reach used to decide whether a galaxy particle or title letter
   // is close enough to be pulled in (the background starfield keeps its
   // own separate, larger radius).
-  static const double partsInfluenceRadius = 150.0;
+  static const double partsInfluenceRadius = 250.0;
 
   // Matches the actual starfield's own colors (see `_stars` below) so the
   // motes read as real stars being pulled in, not a differently-colored
@@ -726,6 +757,7 @@ class _WormholePainter extends CustomPainter {
     final captureT = (progress / _Wormhole.captureFraction).clamp(0.0, 1.0);
     final easeIn = Curves.easeOutCubic.transform(captureT);
     for (final m in w.motes) {
+      if (m.burstOnly) continue;
       final radius = m.startRadius * (1 - easeIn);
       // Spins faster the closer it gets to the center, like real infalling
       // matter speeding up toward the event horizon.
@@ -823,7 +855,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 42;
+  static const int editCount = 43;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -844,6 +876,11 @@ class _GreetingPageState extends State<GreetingPage>
     _titleText.length,
     (_) => GlobalKey(),
   );
+  static const List<Color> _titleGradientColors = [
+    Color(0xFF7F5CFF),
+    Color(0xFFD86FFF),
+    Color(0xFF5CE1FF),
+  ];
 
   // A render object's current on-screen bounds, in the Stack's own
   // coordinate space.
@@ -941,6 +978,9 @@ class _GreetingPageState extends State<GreetingPage>
         final pull = Curves.easeOutCubic.transform(adjusted);
         if (pull > 0.95) {
           _lettersEatenBy[i] = w;
+          w.addCapturedColor(
+            _titleGradientColors[Random().nextInt(_titleGradientColors.length)],
+          );
           return const _LetterEffect(
             opacity: 0,
             rotation: _letterMaxRotation,
@@ -1071,6 +1111,7 @@ class _GreetingPageState extends State<GreetingPage>
         pulls[i] = (w.center - natural) * pull;
         if (pull > 0.95) {
           _galaxyParticlesCaptured[i] = w;
+          w.addCapturedColor(p.color);
         }
         break;
       }
@@ -1526,11 +1567,7 @@ class _GreetingPageState extends State<GreetingPage>
                                 child: ShaderMask(
                                   shaderCallback: (bounds) =>
                                       const LinearGradient(
-                                        colors: [
-                                          Color(0xFF7F5CFF),
-                                          Color(0xFFD86FFF),
-                                          Color(0xFF5CE1FF),
-                                        ],
+                                        colors: _titleGradientColors,
                                       ).createShader(bounds),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
