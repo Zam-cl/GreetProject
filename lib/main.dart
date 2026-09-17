@@ -774,6 +774,14 @@ class _WormholePainter extends CustomPainter {
   bool shouldRepaint(covariant _WormholePainter oldDelegate) => true;
 }
 
+// Render-time result of `_GreetingPageState._updateTitleWormhole`: how far
+// off its normal spot to draw the title, and how visible it should be.
+class _TitlePull {
+  const _TitlePull(this.offset, this.opacity);
+  final Offset offset;
+  final double opacity;
+}
+
 class GreetingPage extends StatefulWidget {
   const GreetingPage({super.key});
 
@@ -783,7 +791,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 38;
+  static const int editCount = 39;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -822,6 +830,69 @@ class _GreetingPageState extends State<GreetingPage>
         ),
       ),
     );
+  }
+
+  // If a wormhole opens close enough to the title, it gets pulled in and
+  // swallowed too, then fades back in at its normal spot once the wormhole
+  // is fully done. The title has no natural "invisible moment" to hide the
+  // reset the way a twinkling star does, so instead its rest position is
+  // captured once (`_titleRestCenter`) and restored while still at opacity
+  // 0, then it's the opacity alone that eases back in — never a visible
+  // jump.
+  _Wormhole? _titleSuckedBy;
+  Offset? _titleRestCenter;
+  double? _titleReformStart;
+  static const double _titleReformDuration = 1.0;
+
+  _TitlePull _updateTitleWormhole(double t) {
+    if (_titleSuckedBy == null) {
+      final rect = _currentTitleRect();
+      if (rect != null) {
+        for (final w in _wormholes) {
+          final elapsed = t - w.startTime;
+          if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
+          final pullRadius = max(rect.width, rect.height) / 2 + 220;
+          if ((w.center - rect.center).distance <= pullRadius) {
+            _titleSuckedBy = w;
+            _titleRestCenter = rect.center;
+            break;
+          }
+        }
+      }
+    }
+
+    final capturedBy = _titleSuckedBy;
+    if (capturedBy != null) {
+      if (capturedBy.isDoneAt(t)) {
+        _titleSuckedBy = null;
+        _titleRestCenter = null;
+        _titleReformStart = t;
+      } else {
+        final rest = _titleRestCenter;
+        if (rest == null) return const _TitlePull(Offset.zero, 1.0);
+        final elapsed = t - capturedBy.startTime;
+        final rawProgress =
+            (elapsed / (_Wormhole.suckDuration * _Wormhole.captureFraction))
+                .clamp(0.0, 1.0);
+        final pull = Curves.easeOutCubic.transform(rawProgress);
+        final offset = (capturedBy.center - rest) * pull;
+        final opacity = (1 - pull * 1.3).clamp(0.0, 1.0);
+        return _TitlePull(offset, opacity);
+      }
+    }
+
+    final reformStart = _titleReformStart;
+    if (reformStart != null) {
+      final since = t - reformStart;
+      if (since >= _titleReformDuration) {
+        _titleReformStart = null;
+        return const _TitlePull(Offset.zero, 1.0);
+      }
+      final progress = (since / _titleReformDuration).clamp(0.0, 1.0);
+      return _TitlePull(Offset.zero, Curves.easeOut.transform(progress));
+    }
+
+    return const _TitlePull(Offset.zero, 1.0);
   }
 
   // Picks a random spot for the galaxy sized off the screen (not a quarter
@@ -889,6 +960,13 @@ class _GreetingPageState extends State<GreetingPage>
   List<_SupernovaSpark>? _explodeSparks;
   bool _hidden = false;
   double? _hiddenSince;
+
+  // If a wormhole opens close enough to the galaxy, it drags the whole
+  // galaxy toward it instead of the pointer — reusing the exact same
+  // elastic swarm-follow physics as a drag — then swallows it (hidden, then
+  // reappearing elsewhere) exactly like after an explosion.
+  bool _galaxySucked = false;
+  _Wormhole? _galaxySuckedBy;
 
   // How long the galaxy takes to grow from nothing back to full size after
   // reappearing from an explosion; null once it's fully formed (or before
@@ -1056,6 +1134,28 @@ class _GreetingPageState extends State<GreetingPage>
       return;
     }
 
+    if (_galaxySucked) {
+      final w = _galaxySuckedBy;
+      if (w == null) {
+        _galaxySucked = false;
+      } else if (w.isDoneAt(t)) {
+        // Swallowed — vanish and reform elsewhere, exactly like after an
+        // explosion (reuses that same hide-then-reappear-then-grow-in
+        // pipeline).
+        _galaxySucked = false;
+        _galaxySuckedBy = null;
+        _hidden = true;
+        _hiddenSince = t;
+        _lastGalaxyT = t;
+        return;
+      } else {
+        // Chase the wormhole's center instead of a drag pointer — the
+        // existing per-particle lag/catch-up below does the rest, giving
+        // the same stretchy swarm-follow look as being dragged in.
+        _galaxyTarget = w.center;
+      }
+    }
+
     final since = _formingSince;
     if (since != null && t - since >= _formationDuration) {
       _formingSince = null;
@@ -1075,12 +1175,14 @@ class _GreetingPageState extends State<GreetingPage>
       lag[i] = Offset.lerp(lag[i], target, factor)!;
     }
 
-    if (_draggingGalaxy) {
+    if (_draggingGalaxy || _galaxySucked) {
       final haloFactor = 1 - exp(-dt / 0.35);
       _haloOpacity += (0.0 - _haloOpacity) * haloFactor;
 
       final dragStart = _dragStartTime;
-      if (dragStart != null && t - dragStart >= _dragExplodeThreshold) {
+      if (_draggingGalaxy &&
+          dragStart != null &&
+          t - dragStart >= _dragExplodeThreshold) {
         _triggerGalaxyExplosion(t);
       }
     } else {
@@ -1098,8 +1200,28 @@ class _GreetingPageState extends State<GreetingPage>
     }
   }
 
+  // Checked every frame from the build loop — starts dragging the galaxy
+  // into a wormhole that opened close enough to it, as long as it isn't
+  // already being manually dragged, exploding, hidden, or already sucked.
+  void _checkWormholeGalaxyCapture(double t) {
+    if (_draggingGalaxy || _hidden || _exploding || _galaxySucked) return;
+    final target = _galaxyTarget;
+    final maxR = _galaxyMaxR;
+    if (target == null || maxR == null) return;
+    for (final w in _wormholes) {
+      final elapsed = t - w.startTime;
+      if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
+      final pullRadius = maxR + 220;
+      if ((w.center - target).distance <= pullRadius) {
+        _galaxySucked = true;
+        _galaxySuckedBy = w;
+        return;
+      }
+    }
+  }
+
   void _onGalaxyPointerDown(PointerDownEvent event) {
-    if (_hidden || _exploding) return;
+    if (_hidden || _exploding || _galaxySucked) return;
     final target = _galaxyTarget;
     final maxR = _galaxyMaxR;
     if (target == null || maxR == null) return;
@@ -1261,8 +1383,10 @@ class _GreetingPageState extends State<GreetingPage>
               builder: (context, _) {
                 final t = DateTime.now().millisecondsSinceEpoch / 1000.0;
                 _ensureGalaxyPhysics(size);
+                _checkWormholeGalaxyCapture(t);
                 _updateGalaxyPhysics(t, size);
                 _updateWormholeTrigger(t);
+                final titlePull = _updateTitleWormhole(t);
                 _fireworks.removeWhere((fw) => fw.isDoneAt(t));
                 _wormholes.removeWhere((w) => w.isDoneAt(t));
                 return Transform.translate(
@@ -1308,44 +1432,46 @@ class _GreetingPageState extends State<GreetingPage>
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 24),
                           child: Transform.translate(
-                            offset: Offset(
-                              _parallax.dx * -4,
-                              _parallax.dy * -4,
-                            ),
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: GestureDetector(
-                                key: _titleKey,
-                                behavior: HitTestBehavior.opaque,
-                                onTap: _spawnFirework,
-                                child: ShaderMask(
-                                  shaderCallback: (bounds) =>
-                                      const LinearGradient(
-                                        colors: [
-                                          Color(0xFF7F5CFF),
-                                          Color(0xFFD86FFF),
-                                          Color(0xFF5CE1FF),
+                            offset:
+                                Offset(_parallax.dx * -4, _parallax.dy * -4) +
+                                titlePull.offset,
+                            child: Opacity(
+                              opacity: titlePull.opacity,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: GestureDetector(
+                                  key: _titleKey,
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: _spawnFirework,
+                                  child: ShaderMask(
+                                    shaderCallback: (bounds) =>
+                                        const LinearGradient(
+                                          colors: [
+                                            Color(0xFF7F5CFF),
+                                            Color(0xFFD86FFF),
+                                            Color(0xFF5CE1FF),
+                                          ],
+                                        ).createShader(bounds),
+                                    child: Text(
+                                      'Hello there!',
+                                      style: GoogleFonts.orbitron(
+                                        fontSize: 64,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                        letterSpacing: 2,
+                                        shadows: [
+                                          Shadow(
+                                            color: const Color(0xFFB388FF)
+                                                .withValues(alpha: 0.75),
+                                            blurRadius: 6,
+                                          ),
+                                          Shadow(
+                                            color: const Color(0xFF5CE1FF)
+                                                .withValues(alpha: 0.45),
+                                            blurRadius: 14,
+                                          ),
                                         ],
-                                      ).createShader(bounds),
-                                  child: Text(
-                                    'Hello there!',
-                                    style: GoogleFonts.orbitron(
-                                      fontSize: 64,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                      letterSpacing: 2,
-                                      shadows: [
-                                        Shadow(
-                                          color: const Color(0xFFB388FF)
-                                              .withValues(alpha: 0.75),
-                                          blurRadius: 6,
-                                        ),
-                                        Shadow(
-                                          color: const Color(0xFF5CE1FF)
-                                              .withValues(alpha: 0.45),
-                                          blurRadius: 14,
-                                        ),
-                                      ],
+                                      ),
                                     ),
                                   ),
                                 ),
