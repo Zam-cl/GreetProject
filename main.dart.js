@@ -58175,7 +58175,7 @@ EO(a,b){var s=b.a
 if(s===0||b.b===0)return
 this.aX(new A.a0V(this,B.c.ba((a.a/s-0.5)*2,-1,1),B.c.ba((a.b/b.b-0.5)*2,-1,1)))},
 S(a){return new A.tL(A.ajN(new A.a15(this)),B.yf,null)},
-Wd(a,b,c){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e
+Wd(a,b,c){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d
 for(s=this.go,r=s.length,q=b.a,p=b.b,o=this.k3,n=a.a,m=null,l=0;l<s.length;s.length===r||(0,A.p)(s),++l){k=s[l]
 j=c-k.b
 if(j<0||j>3)continue
@@ -58183,10 +58183,11 @@ i=k.a
 h=i.a-q
 g=i.b-p
 f=Math.sqrt(h*h+g*g)
-if(f>260||f<1)continue
-e=B.c.ba((1-f/260)*B.fH.aa(B.c.ba(j/1.35,0,1)),0,0.98)
-m=A.n9(m==null?b:m,i,e)
-if(e>0.9)o.A(0,n)}return m},
+if(f>260)continue
+e=f/260*0.35
+d=B.fH.aa(B.c.ba((B.c.ba(j/1.35,0,1)-e)/(1-e),0,1))
+m=A.n9(b,i,d)
+if(d>0.95)o.A(0,n)}return m},
 O6(a,b,c){var s,r,q=null,p=this.k3,o=a.a
 if(p.u(0,o))if(a.FC(b)<0.05)p.C(0,o)
 else return B.da
@@ -58304,7 +58305,7 @@ p.push(A.tf(0,A.q3(g,g,new A.FH(o,n,f*2*3.141592653589793/45,l,k,e.ay,e.BU(f))))
 p.push(A.a5Y(new A.l2(B.z4,A.a7n(new A.zI(B.vR,A.aan(B.ar,new A.CP(new A.a0Y(),A.ac2("Hello there!",A.aqp().$5$color$fontSize$fontWeight$letterSpacing$shadows(B.i,64,B.bQ,2,A.d([new A.eO(B.dM.bi(0.75),B.j,6),new A.eO(B.jH.bi(0.45),B.j,14)],t.o5))),g),B.dX,!1,e.r,g,g,g,g,g,g,g,g,g,g,g,g,e.gV0(),g,g,g),g),new A.z(o.a*-4,o.b*-4)),g),g,g))
 p.push(A.tf(0,A.qZ(A.q3(g,g,new A.Fq(d,f)),!0)))
 p.push(A.tf(0,A.qZ(A.q3(g,g,new A.JD(s,f)),!0)))
-p.push(A.a6T(g,new A.Cg(B.cf,B.cU,B.pl,B.cx,g,B.M3,g,0,A.d([A.ajy(B.w,B.dn,B.zy,16,g,new A.a0Z(),B.bP,16,g,"Reload",B.vj),B.Hd,A.ac2("Test-v0.37",A.aqo().$2$color$fontSize(B.w,12))],q),g),g,g,g,12,4,g))
+p.push(A.a6T(g,new A.Cg(B.cf,B.cU,B.pl,B.cx,g,B.M3,g,0,A.d([A.ajy(B.w,B.dn,B.zy,16,g,new A.a0Z(),B.bP,16,g,"Reload",B.vj),B.Hd,A.ac2("Test-v0.38",A.aqo().$2$color$fontSize(B.w,12))],q),g),g,g,g,12,4,g))
 return A.a7n(A.XU(B.f8,p,B.im,e.f),r)},
 $S:87}
 A.a0W.prototype={
