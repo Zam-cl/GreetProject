@@ -596,7 +596,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 30;
+  static const int editCount = 31;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -770,16 +770,14 @@ class _GreetingPageState extends State<GreetingPage>
       lag.length,
       (i) => lag[i] - center,
     );
+    // The travel direction itself is always fully random and independent of
+    // that starting offset: while being dragged around for the 2+ seconds
+    // it takes to trigger this, the whole swarm trails behind the pointer
+    // like a comet tail, so nearly every particle's offset-from-center ends
+    // up pointing the same way — using that as the blast direction made the
+    // "explosion" fly out in only one direction instead of everywhere.
     _explodeVelocities = List<Offset>.generate(lag.length, (i) {
-      final fromCenter = _explodeStartOffsets![i];
-      final dist = fromCenter.distance;
-      // Particles already out on the arms keep flying along their existing
-      // radial direction; particles near the core (near-zero offset) get a
-      // random direction since there's no meaningful one to keep.
-      final baseAngle = dist > 4
-          ? atan2(fromCenter.dy, fromCenter.dx)
-          : random.nextDouble() * 2 * pi;
-      final angle = baseAngle + (random.nextDouble() - 0.5) * 0.6;
+      final angle = random.nextDouble() * 2 * pi;
       final speed = 260 + random.nextDouble() * 520;
       return Offset(cos(angle), sin(angle)) * speed;
     });
