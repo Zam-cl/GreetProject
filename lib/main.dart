@@ -596,7 +596,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 31;
+  static const int editCount = 32;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -759,17 +759,28 @@ class _GreetingPageState extends State<GreetingPage>
   void _triggerGalaxyExplosion(double t) {
     final center = _galaxyTarget;
     final lag = _particleLag;
-    if (center == null || lag == null) return;
+    final maxR = _galaxyMaxR;
+    if (center == null || lag == null || maxR == null) return;
     final random = Random();
+    final effectiveR = maxR * _galaxyFormationProgress(t);
+    final rotation = t * 2 * pi / 45;
 
-    // Each star keeps exploding outward from wherever it actually was
-    // relative to the black hole the instant the blast went off, rather
-    // than from a single point — otherwise the spread-out galaxy visibly
-    // collapses to a dot for the first frame before "exploding" back out.
-    _explodeStartOffsets = List<Offset>.generate(
-      lag.length,
-      (i) => lag[i] - center,
-    );
+    // Each star keeps exploding outward from wherever it actually was on
+    // screen the instant the blast went off — its spiral position around
+    // the (possibly drag-lagged) black hole, i.e. exactly what `_GalaxyPainter`
+    // was drawing the frame before — not just the black hole's own location.
+    // Using only the lag offset here (dropping the orbital spread) used to
+    // make the shockwave/flash (anchored on the black hole) and the stars
+    // burst from visibly different spots.
+    _explodeStartOffsets = List<Offset>.generate(lag.length, (i) {
+      final p = _galaxyParticles[i];
+      final angle = p.angle + rotation;
+      final orbitOffset = Offset(
+        cos(angle) * p.radius * effectiveR,
+        sin(angle) * p.radius * effectiveR * _GalaxyPainter._tilt,
+      );
+      return (lag[i] + orbitOffset) - center;
+    });
     // The travel direction itself is always fully random and independent of
     // that starting offset: while being dragged around for the 2+ seconds
     // it takes to trigger this, the whole swarm trails behind the pointer
