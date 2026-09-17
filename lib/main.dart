@@ -785,40 +785,6 @@ class _WormholePainter extends CustomPainter {
   bool shouldRepaint(covariant _WormholePainter oldDelegate) => true;
 }
 
-// Render-time result of `_GreetingPageState._updateTitleWormhole`: where (in
-// the title's own local coordinates) a wormhole is biting into it, and how
-// big that bite currently is. `center == null` means no bite at all.
-class _TitleHole {
-  const _TitleHole(this.center, this.radius);
-  final Offset? center;
-  final double radius;
-}
-
-// Clips a growing (or shrinking) circular hole out of the title, centered
-// wherever a wormhole is relative to it — this is what makes the title look
-// like it's being eaten into from the wormhole's direction, in parts,
-// rather than fading away as a whole.
-class _EatenTextClipper extends CustomClipper<Path> {
-  const _EatenTextClipper({required this.holeCenter, required this.holeRadius});
-
-  final Offset holeCenter;
-  final double holeRadius;
-
-  @override
-  Path getClip(Size size) {
-    final full = Path()..addRect(Offset.zero & size);
-    if (holeRadius <= 0) return full;
-    final hole = Path()
-      ..addOval(Rect.fromCircle(center: holeCenter, radius: holeRadius));
-    return Path.combine(PathOperation.difference, full, hole);
-  }
-
-  @override
-  bool shouldReclip(covariant _EatenTextClipper oldClipper) =>
-      oldClipper.holeCenter != holeCenter ||
-      oldClipper.holeRadius != holeRadius;
-}
-
 class GreetingPage extends StatefulWidget {
   const GreetingPage({super.key});
 
@@ -828,7 +794,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 40;
+  static const int editCount = 41;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -841,19 +807,31 @@ class _GreetingPageState extends State<GreetingPage>
   final GlobalKey _titleKey = GlobalKey();
   final List<_Firework> _fireworks = [];
 
-  // The title's current on-screen bounds, in the Stack's own coordinate
-  // space — used both to center firework bursts on it and to keep the
-  // galaxy from being placed on top of it.
-  Rect? _currentTitleRect() {
+  // The title, split into individually keyed letters so a nearby wormhole
+  // can eat it letter by letter instead of as one rigid block — each
+  // letter checks its own distance to the wormhole, just like a star does.
+  static const String _titleText = 'Hello there!';
+  final List<GlobalKey> _letterKeys = List.generate(
+    _titleText.length,
+    (_) => GlobalKey(),
+  );
+
+  // A render object's current on-screen bounds, in the Stack's own
+  // coordinate space.
+  Rect? _rectOf(GlobalKey key) {
     final stageBox = _stageKey.currentContext?.findRenderObject() as RenderBox?;
-    final titleBox = _titleKey.currentContext?.findRenderObject() as RenderBox?;
-    if (stageBox == null || titleBox == null) return null;
-    final topLeft = stageBox.globalToLocal(titleBox.localToGlobal(Offset.zero));
+    final box = key.currentContext?.findRenderObject() as RenderBox?;
+    if (stageBox == null || box == null) return null;
+    final topLeft = stageBox.globalToLocal(box.localToGlobal(Offset.zero));
     final bottomRight = stageBox.globalToLocal(
-      titleBox.localToGlobal(titleBox.size.bottomRight(Offset.zero)),
+      box.localToGlobal(box.size.bottomRight(Offset.zero)),
     );
     return Rect.fromPoints(topLeft, bottomRight);
   }
+
+  // The whole title's bounds — used to center firework bursts on it and to
+  // keep the galaxy from being placed on top of it.
+  Rect? _currentTitleRect() => _rectOf(_titleKey);
 
   void _spawnFirework() {
     final rect = _currentTitleRect();
@@ -869,86 +847,60 @@ class _GreetingPageState extends State<GreetingPage>
     );
   }
 
-  // Converts a point in the Stack's coordinate space into the title's own
-  // local coordinates — used to place the wormhole's eaten-hole clip
-  // exactly where the wormhole actually is relative to the text, through
-  // whatever transforms (parallax, FittedBox scaling) sit in between.
-  Offset? _stageToTitleLocal(Offset stagePos) {
-    final stageBox = _stageKey.currentContext?.findRenderObject() as RenderBox?;
-    final titleBox = _titleKey.currentContext?.findRenderObject() as RenderBox?;
-    if (stageBox == null || titleBox == null) return null;
-    return titleBox.globalToLocal(stageBox.localToGlobal(stagePos));
-  }
+  // Which letter indices are currently swallowed by which wormhole (so they
+  // can be released again once that wormhole is done), and, for letters
+  // just released, when their reveal fade started. Uses the same influence
+  // radius and pull timing as the galaxy's own per-particle capture, so the
+  // title gets eaten by the same amount of "bite" as everything else near
+  // the wormhole — not a radius scaled to the whole title's size.
+  final Map<int, _Wormhole> _lettersEatenBy = {};
+  final Map<int, double> _lettersReleaseAt = {};
+  static const double _letterInfluenceRadius = 220.0;
+  static const double _letterReleaseFadeDuration = 0.45;
 
-  // If a wormhole opens close enough to the title, it eats a growing
-  // circular hole into it centered wherever the wormhole actually is
-  // relative to the text (see `_EatenTextClipper`) — rather than the whole
-  // title fading as one piece — then the hole shrinks back down once the
-  // wormhole is fully done, revealing the text again.
-  _Wormhole? _titleEatenBy;
-  Offset? _titleHoleStageCenter;
-  double _titleHoleMaxRadius = 0;
-  double? _titleReformStart;
-  static const double _titleReformDuration = 1.0;
+  List<double> _computeLetterOpacities(double t) {
+    _lettersEatenBy.removeWhere((index, w) {
+      if (!w.isDoneAt(t)) return false;
+      _lettersReleaseAt[index] = t;
+      return true;
+    });
 
-  _TitleHole _updateTitleWormhole(double t) {
-    if (_titleEatenBy == null && _titleReformStart == null) {
-      final rect = _currentTitleRect();
-      if (rect != null) {
-        for (final w in _wormholes) {
-          final elapsed = t - w.startTime;
-          if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
-          final pullRadius = max(rect.width, rect.height) / 2 + 220;
-          if ((w.center - rect.center).distance <= pullRadius) {
-            _titleEatenBy = w;
-            _titleHoleStageCenter = w.center;
-            // The diagonal guarantees the hole can fully cover the text no
-            // matter where within (or near) it the wormhole is centered.
-            _titleHoleMaxRadius = Offset(rect.width, rect.height).distance;
-            break;
-          }
+    return List<double>.generate(_titleText.length, (i) {
+      if (_titleText[i] == ' ') return 1.0;
+
+      if (_lettersEatenBy.containsKey(i)) return 0.0;
+
+      final releaseAt = _lettersReleaseAt[i];
+      if (releaseAt != null) {
+        final since = t - releaseAt;
+        if (since >= _letterReleaseFadeDuration) {
+          _lettersReleaseAt.remove(i);
+          return 1.0;
         }
+        return (since / _letterReleaseFadeDuration).clamp(0.0, 1.0);
       }
-    }
 
-    final capturedBy = _titleEatenBy;
-    if (capturedBy != null) {
-      if (capturedBy.isDoneAt(t)) {
-        _titleEatenBy = null;
-        _titleReformStart = t;
-      } else {
-        final stageCenter = _titleHoleStageCenter;
-        final local = stageCenter == null
-            ? null
-            : _stageToTitleLocal(stageCenter);
-        if (local == null) return const _TitleHole(null, 0);
-        final elapsed = t - capturedBy.startTime;
+      final rect = _rectOf(_letterKeys[i]);
+      if (rect == null) return 1.0;
+      for (final w in _wormholes) {
+        final elapsed = t - w.startTime;
+        if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
+        final dist = (w.center - rect.center).distance;
+        if (dist > _letterInfluenceRadius) continue;
+        final delay = (dist / _letterInfluenceRadius) * 0.35;
         final rawProgress =
             (elapsed / (_Wormhole.suckDuration * _Wormhole.captureFraction))
                 .clamp(0.0, 1.0);
-        final eased = Curves.easeOutCubic.transform(rawProgress);
-        return _TitleHole(local, eased * _titleHoleMaxRadius);
+        final adjusted = ((rawProgress - delay) / (1 - delay)).clamp(0.0, 1.0);
+        final pull = Curves.easeOutCubic.transform(adjusted);
+        if (pull > 0.95) {
+          _lettersEatenBy[i] = w;
+          return 0.0;
+        }
+        return (1 - pull).clamp(0.0, 1.0);
       }
-    }
-
-    final reformStart = _titleReformStart;
-    if (reformStart != null) {
-      final stageCenter = _titleHoleStageCenter;
-      final local = stageCenter == null
-          ? null
-          : _stageToTitleLocal(stageCenter);
-      final since = t - reformStart;
-      if (local == null || since >= _titleReformDuration) {
-        _titleReformStart = null;
-        _titleHoleStageCenter = null;
-        return const _TitleHole(null, 0);
-      }
-      final progress = (since / _titleReformDuration).clamp(0.0, 1.0);
-      final eased = 1 - Curves.easeIn.transform(progress);
-      return _TitleHole(local, eased * _titleHoleMaxRadius);
-    }
-
-    return const _TitleHole(null, 0);
+      return 1.0;
+    });
   }
 
   // Picks a random spot for the galaxy sized off the screen (not a quarter
@@ -1278,12 +1230,19 @@ class _GreetingPageState extends State<GreetingPage>
     }
   }
 
+  // How close a press has to be to the black hole to grab the galaxy for
+  // dragging — deliberately tighter than the visible spiral's own radius
+  // (rather than the old 1.3x margin around it) so a wormhole can still be
+  // opened fairly close to the galaxy without accidentally grabbing it.
+  static const double _galaxyGrabRadiusFactor = 0.75;
+
   void _onGalaxyPointerDown(PointerDownEvent event) {
     if (_hidden || _exploding) return;
     final target = _galaxyTarget;
     final maxR = _galaxyMaxR;
     if (target == null || maxR == null) return;
-    if ((event.localPosition - target).distance <= maxR * 1.3) {
+    if ((event.localPosition - target).distance <=
+        maxR * _galaxyGrabRadiusFactor) {
       _draggingGalaxy = true;
       _galaxyTarget = event.localPosition;
       _dragStartTime = DateTime.now().millisecondsSinceEpoch / 1000.0;
@@ -1324,7 +1283,8 @@ class _GreetingPageState extends State<GreetingPage>
     final maxR = _galaxyMaxR;
     if (target != null &&
         maxR != null &&
-        (event.localPosition - target).distance <= maxR * 1.3) {
+        (event.localPosition - target).distance <=
+            maxR * _galaxyGrabRadiusFactor) {
       return;
     }
     _wormholePressStart = event.localPosition;
@@ -1443,7 +1403,7 @@ class _GreetingPageState extends State<GreetingPage>
                 _ensureGalaxyPhysics(size);
                 _updateGalaxyPhysics(t, size);
                 _updateWormholeTrigger(t);
-                final titleHole = _updateTitleWormhole(t);
+                final letterOpacities = _computeLetterOpacities(t);
                 final galaxyPull = _computeGalaxyWormholePull(t);
                 _fireworks.removeWhere((fw) => fw.isDoneAt(t));
                 _wormholes.removeWhere((w) => w.isDoneAt(t));
@@ -1501,51 +1461,55 @@ class _GreetingPageState extends State<GreetingPage>
                               _parallax.dx * -4,
                               _parallax.dy * -4,
                             ),
-                            child: ClipPath(
-                              clipper:
-                                  (titleHole.center != null &&
-                                      titleHole.radius > 0)
-                                  ? _EatenTextClipper(
-                                      holeCenter: titleHole.center!,
-                                      holeRadius: titleHole.radius,
-                                    )
-                                  : null,
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: GestureDetector(
-                                  key: _titleKey,
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: _spawnFirework,
-                                  child: ShaderMask(
-                                    shaderCallback: (bounds) =>
-                                        const LinearGradient(
-                                          colors: [
-                                            Color(0xFF7F5CFF),
-                                            Color(0xFFD86FFF),
-                                            Color(0xFF5CE1FF),
-                                          ],
-                                        ).createShader(bounds),
-                                    child: Text(
-                                      'Hello there!',
-                                      style: GoogleFonts.orbitron(
-                                        fontSize: 64,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                        letterSpacing: 2,
-                                        shadows: [
-                                          Shadow(
-                                            color: const Color(0xFFB388FF)
-                                                .withValues(alpha: 0.75),
-                                            blurRadius: 6,
-                                          ),
-                                          Shadow(
-                                            color: const Color(0xFF5CE1FF)
-                                                .withValues(alpha: 0.45),
-                                            blurRadius: 14,
-                                          ),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: GestureDetector(
+                                key: _titleKey,
+                                behavior: HitTestBehavior.opaque,
+                                onTap: _spawnFirework,
+                                child: ShaderMask(
+                                  shaderCallback: (bounds) =>
+                                      const LinearGradient(
+                                        colors: [
+                                          Color(0xFF7F5CFF),
+                                          Color(0xFFD86FFF),
+                                          Color(0xFF5CE1FF),
                                         ],
-                                      ),
-                                    ),
+                                      ).createShader(bounds),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      for (
+                                        var i = 0;
+                                        i < _titleText.length;
+                                        i++
+                                      )
+                                        Opacity(
+                                          key: _letterKeys[i],
+                                          opacity: letterOpacities[i],
+                                          child: Text(
+                                            _titleText[i],
+                                            style: GoogleFonts.orbitron(
+                                              fontSize: 64,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                              letterSpacing: 2,
+                                              shadows: [
+                                                Shadow(
+                                                  color: const Color(0xFFB388FF)
+                                                      .withValues(alpha: 0.75),
+                                                  blurRadius: 6,
+                                                ),
+                                                Shadow(
+                                                  color: const Color(0xFF5CE1FF)
+                                                      .withValues(alpha: 0.45),
+                                                  blurRadius: 14,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                 ),
                               ),
