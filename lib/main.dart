@@ -165,46 +165,59 @@ class _CometsPainter extends CustomPainter {
 
 class _FireworkParticle {
   const _FireworkParticle({
+    required this.startOffset,
     required this.angle,
     required this.speed,
     required this.color,
     required this.size,
   });
 
-  final double angle; // travel direction, radians
+  // Starting point relative to the firework's center, on the ring that
+  // traces around the title text — this is what makes the burst appear to
+  // surround the text instead of exploding from a single point.
+  final Offset startOffset;
+  final double angle; // outward travel direction, radians
   final double speed; // pixels per second
   final Color color;
   final double size;
 }
 
 class _Firework {
-  _Firework({required this.origin, required this.startTime})
-      : particles = _buildParticles();
+  _Firework({required this.center, required this.startTime, required Size textSize})
+    : ringHalfWidth = textSize.width / 2 + 18,
+      ringHalfHeight = textSize.height / 2 + 18,
+      particles = _buildParticles(
+        textSize.width / 2 + 18,
+        textSize.height / 2 + 18,
+      );
 
-  final Offset origin;
+  final Offset center;
   final double startTime;
+  final double ringHalfWidth;
+  final double ringHalfHeight;
   final List<_FireworkParticle> particles;
 
   static const double lifespan = 1.1;
   static const double _gravity = 220; // px/s^2, pulls the sparks down
 
   static const List<Color> _palette = [
-    Color(0xFFFF5C5C),
-    Color(0xFFFFD15C),
-    Color(0xFF5CFF8F),
-    Color(0xFF5CD1FF),
-    Color(0xFFB388FF),
-    Color(0xFFFF8FD0),
+    Color(0xFFFFD700), // gold
+    Color(0xFFFFC400), // amber
+    Color(0xFFFFEA00), // vivid yellow
+    Color(0xFFFFF59D), // pale yellow
+    Color(0xFFFFB300), // deep amber
   ];
 
-  static List<_FireworkParticle> _buildParticles() {
+  static List<_FireworkParticle> _buildParticles(double halfW, double halfH) {
     final random = Random();
-    return List.generate(44, (i) {
+    return List.generate(160, (i) {
+      final angle = random.nextDouble() * 2 * pi;
       return _FireworkParticle(
-        angle: random.nextDouble() * 2 * pi,
-        speed: 60 + random.nextDouble() * 150,
+        startOffset: Offset(cos(angle) * halfW, sin(angle) * halfH),
+        angle: angle,
+        speed: 50 + random.nextDouble() * 150,
         color: _palette[random.nextInt(_palette.length)],
-        size: 2.0 + random.nextDouble() * 2.2,
+        size: 1.8 + random.nextDouble() * 2.0,
       );
     });
   }
@@ -224,15 +237,20 @@ class _FireworksPainter extends CustomPainter {
       final elapsed = t - fw.startTime;
       if (elapsed < 0 || elapsed > _Firework.lifespan) continue;
 
-      // A quick bright pop at the moment of the burst.
+      // A quick bright pop framing the text at the moment of the burst.
       if (elapsed < 0.12) {
         final flashT = elapsed / 0.12;
-        canvas.drawCircle(
-          fw.origin,
-          10 + 40 * (1 - flashT),
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: fw.center,
+            width: fw.ringHalfWidth * 2.2,
+            height: fw.ringHalfHeight * 2.2,
+          ),
           Paint()
-            ..color = Colors.white.withValues(alpha: (1 - flashT) * 0.8)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+            ..color = const Color(
+              0xFFFFF59D,
+            ).withValues(alpha: (1 - flashT) * 0.7)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16),
         );
       }
 
@@ -243,7 +261,7 @@ class _FireworksPainter extends CustomPainter {
         final dx = cos(p.angle) * radial;
         final dy =
             sin(p.angle) * radial + 0.5 * _Firework._gravity * elapsed * elapsed;
-        final pos = fw.origin + Offset(dx, dy);
+        final pos = fw.center + p.startOffset + Offset(dx, dy);
         final currentSize = (p.size * (1 - progress * 0.5)).clamp(
           0.3,
           double.infinity,
@@ -447,22 +465,37 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 26;
+  static const int editCount = 27;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
 
   // Fireworks set off by tapping the title. `_stageKey` marks the Stack
-  // whose coordinate space the burst origin (and the painter's canvas) share.
+  // whose coordinate space the burst (and the painter's canvas) share;
+  // `_titleKey` marks the title text itself, so the burst can be sized and
+  // centered around it regardless of where exactly it was tapped.
   final GlobalKey _stageKey = GlobalKey();
+  final GlobalKey _titleKey = GlobalKey();
   final List<_Firework> _fireworks = [];
 
-  void _spawnFirework(Offset globalPosition) {
-    final box = _stageKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null) return;
-    final local = box.globalToLocal(globalPosition);
-    setState(() => _fireworks.add(_Firework(origin: local, startTime:
-        DateTime.now().millisecondsSinceEpoch / 1000.0)));
+  void _spawnFirework() {
+    final stageBox = _stageKey.currentContext?.findRenderObject() as RenderBox?;
+    final titleBox = _titleKey.currentContext?.findRenderObject() as RenderBox?;
+    if (stageBox == null || titleBox == null) return;
+    final topLeft = stageBox.globalToLocal(titleBox.localToGlobal(Offset.zero));
+    final bottomRight = stageBox.globalToLocal(
+      titleBox.localToGlobal(titleBox.size.bottomRight(Offset.zero)),
+    );
+    final rect = Rect.fromPoints(topLeft, bottomRight);
+    setState(
+      () => _fireworks.add(
+        _Firework(
+          center: rect.center,
+          startTime: DateTime.now().millisecondsSinceEpoch / 1000.0,
+          textSize: rect.size,
+        ),
+      ),
+    );
   }
 
   // Picked once (lazily, as soon as the screen size is known) so the
@@ -695,9 +728,9 @@ class _GreetingPageState extends State<GreetingPage>
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
                             child: GestureDetector(
+                              key: _titleKey,
                               behavior: HitTestBehavior.opaque,
-                              onTapUp: (details) =>
-                                  _spawnFirework(details.globalPosition),
+                              onTap: _spawnFirework,
                               child: ShaderMask(
                                 shaderCallback: (bounds) =>
                                     const LinearGradient(
