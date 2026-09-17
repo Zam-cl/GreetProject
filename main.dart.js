@@ -57960,10 +57960,10 @@ A.JD.prototype={
 aK(a,b){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e=this
 for(s=e.b,r=s.length,q=e.c,p=t.W,o=a.a,n=0;n<s.length;s.length===r||(0,A.p)(s),++n){m=s[n]
 l=q-m.b
-if(l<0||l>2.55)continue
-if(l<1)e.TD(a,m,l)
-else{k=l-1
-if(l<1.25){j=B.c.bf(k/0.25,0,1)
+if(l<0||l>3.95)continue
+if(l<2.4)e.TD(a,m,l)
+else{k=l-2.4
+if(l<2.65){j=B.c.bf(k/0.25,0,1)
 i=10+90*j
 k=m.a
 $.Y()
@@ -57974,7 +57974,7 @@ h.z=B.Dz
 f=h.bJ()
 o.drawCircle(k.a,k.b,i,f)
 f.delete()}else e.TA(a,m,k-0.25)}}},
-TD(a1,a2,a3){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b=B.c.bf(a3/1,0,1),a=6+40*b,a0=a2.a
+TD(a1,a2,a3){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b=B.c.bf(a3/2.4,0,1),a=6+40*b,a0=a2.a
 $.Y()
 s=A.aZ()
 s.sfB(A.qU(a0,a,A.d([B.jq,B.jw.bi(0.6),B.jw.bi(0)],t.W),null))
@@ -58175,13 +58175,13 @@ S(a){return new A.tL(A.ajN(new A.a15(this)),B.ye,null)},
 NY(a,b){var s,r,q,p,o,n,m,l,k,j,i
 for(s=this.go,r=s.length,q=a,p=0;p<s.length;s.length===r||(0,A.p)(s),++p){o=s[p]
 n=b-o.b
-if(n<0||n>1)continue
+if(n<0||n>2.4)continue
 m=o.a
 l=m.a-q.a
 k=m.b-q.b
 j=Math.sqrt(l*l+k*k)
 if(j>260||j<1)continue
-i=B.c.bf(n/1,0,1)
+i=B.c.bf(n/2.4,0,1)
 m=A.n9(q,m,B.c.bf((1-j/260)*i*i,0,0.96))
 m.toString
 q=m}return q}}
@@ -58298,14 +58298,14 @@ p.push(A.tf(0,A.q4(c,c,new A.FH(o,n,b*2*3.141592653589793/45,m,h,a.ay,a.BU(b))))
 p.push(A.a5Y(new A.l2(B.z4,A.a7m(new A.zI(B.vQ,A.aam(B.ar,new A.CP(new A.a0Y(),A.ac2("Hello there!",A.aqp().$5$color$fontSize$fontWeight$letterSpacing$shadows(B.i,64,B.bQ,2,A.d([new A.eO(B.dL.bi(0.75),B.j,6),new A.eO(B.jG.bi(0.45),B.j,14)],t.o5))),c),B.dW,!1,a.r,c,c,c,c,c,c,c,c,c,c,c,c,a.gV_(),c,c,c),c),new A.z(o.a*-4,o.b*-4)),c),c,c))
 p.push(A.tf(0,A.r_(A.q4(c,c,new A.Fq(a0,b)),!0)))
 p.push(A.tf(0,A.r_(A.q4(c,c,new A.JD(s,b)),!0)))
-p.push(A.abk(c,new A.Cg(B.cf,B.cU,B.pk,B.cx,c,B.M3,c,0,A.d([A.ajy(B.w,B.dm,B.zy,16,c,new A.a0Z(),B.bP,16,c,"Reload",B.vi),B.Hd,A.ac2("Test-v0.35",A.aqo().$2$color$fontSize(B.w,12))],q),c),c,c,c,12,4,c))
+p.push(A.abk(c,new A.Cg(B.cf,B.cU,B.pk,B.cx,c,B.M3,c,0,A.d([A.ajy(B.w,B.dm,B.zy,16,c,new A.a0Z(),B.bP,16,c,"Reload",B.vi),B.Hd,A.ac2("Test-v0.36",A.aqo().$2$color$fontSize(B.w,12))],q),c),c,c,c,12,4,c))
 return A.a7m(A.XU(B.f8,p,B.il,a.f),r)},
 $S:87}
 A.a0W.prototype={
 $1(a){return this.a-a.b>1.1},
 $S:390}
 A.a0X.prototype={
-$1(a){return this.a-a.b>2.55},
+$1(a){return this.a-a.b>3.95},
 $S:391}
 A.a0Y.prototype={
 $1(a){var s=B.iJ.a5(null).J6(a),r=B.f9.a5(null).J6(a),q=B.zR.S6()
