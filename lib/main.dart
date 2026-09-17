@@ -613,7 +613,6 @@ class _WormholeMote {
     required this.burstSpeed,
     required this.color,
     required this.size,
-    this.burstOnly = false,
   });
 
   final double startAngle; // radians, where it drifts in from
@@ -624,12 +623,16 @@ class _WormholeMote {
   final double burstSpeed; // px/s
   final Color color;
   final double size;
-  // True for motes added after the wormhole already started (see
-  // `_Wormhole.addCapturedColor`) — they skip the suck-in spiral (which is
-  // timed from the wormhole's own start, so a mote added partway through
-  // would otherwise jump straight to a mid-flight position) and only
-  // appear once the burst-out begins.
-  final bool burstOnly;
+
+  _WormholeMote withColor(Color newColor) => _WormholeMote(
+    startAngle: startAngle,
+    startRadius: startRadius,
+    spinRate: spinRate,
+    burstAngle: burstAngle,
+    burstSpeed: burstSpeed,
+    color: newColor,
+    size: size,
+  );
 }
 
 // A secret one-shot easter egg: hold a finger/click on empty sky (away from
@@ -645,26 +648,19 @@ class _Wormhole {
   final List<_WormholeMote> motes;
 
   // Called whenever this wormhole actually swallows a piece of the galaxy
-  // or the title — adds a couple of burst-only motes in that piece's own
-  // color, so the debris flying back out visibly includes bits of whatever
-  // it just ate instead of only its own plain starlight palette.
+  // or the title — recolors a sizeable batch of its existing motes to that
+  // piece's own color, so the debris flying back out visibly shows bits of
+  // whatever it just ate. Recoloring motes that have existed since the
+  // wormhole opened (rather than adding brand-new ones) keeps them moving
+  // exactly as they already were — no jump, and it reads as far more
+  // noticeable than sprinkling in just one or two new specks would.
+  final Random _captureRandom = Random();
   void addCapturedColor(Color color) {
-    final random = Random();
-    final count = 1 + random.nextInt(2);
-    for (var i = 0; i < count; i++) {
-      final angle = random.nextDouble() * 2 * pi;
-      motes.add(
-        _WormholeMote(
-          startAngle: angle,
-          startRadius: 0,
-          spinRate: 0,
-          burstAngle: angle,
-          burstSpeed: 220 + random.nextDouble() * 380,
-          color: color,
-          size: 1.6 + random.nextDouble() * 2.4,
-          burstOnly: true,
-        ),
-      );
+    final batch = min(motes.length, 16 + _captureRandom.nextInt(10));
+    final indices = List<int>.generate(motes.length, (i) => i)
+      ..shuffle(_captureRandom);
+    for (final index in indices.take(batch)) {
+      motes[index] = motes[index].withColor(color);
     }
   }
 
@@ -757,7 +753,6 @@ class _WormholePainter extends CustomPainter {
     final captureT = (progress / _Wormhole.captureFraction).clamp(0.0, 1.0);
     final easeIn = Curves.easeOutCubic.transform(captureT);
     for (final m in w.motes) {
-      if (m.burstOnly) continue;
       final radius = m.startRadius * (1 - easeIn);
       // Spins faster the closer it gets to the center, like real infalling
       // matter speeding up toward the event horizon.
@@ -855,7 +850,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 43;
+  static const int editCount = 44;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
