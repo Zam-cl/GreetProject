@@ -337,6 +337,7 @@ class _GalaxyPainter extends CustomPainter {
     required this.maxR,
     required this.blackHoleCenter,
     required this.haloOpacity,
+    this.formation = 1.0,
   });
 
   final List<_GalaxyParticle> particles;
@@ -350,6 +351,10 @@ class _GalaxyPainter extends CustomPainter {
   // Fades out while dragging so the ambient glow doesn't look like it's
   // stuck to the cursor; eases back in once the galaxy is at rest.
   final double haloOpacity;
+  // 0..1 growth toward `maxR` right after the galaxy reappears from an
+  // explosion, so it visibly condenses back into being instead of just
+  // popping into view at full size; 1.0 the rest of the time.
+  final double formation;
 
   // Squash the disc vertically so it reads as a tilted spiral, like a real
   // galaxy seen at an angle rather than flat-on.
@@ -357,13 +362,16 @@ class _GalaxyPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final effectiveR = maxR * formation;
+    final starAlpha = 0.85 * formation;
+
     canvas.save();
     canvas.translate(blackHoleCenter.dx, blackHoleCenter.dy);
     canvas.drawCircle(
       Offset.zero,
-      maxR * 1.05,
+      effectiveR * 1.05,
       Paint()
-        ..shader = ui.Gradient.radial(Offset.zero, maxR * 1.05, [
+        ..shader = ui.Gradient.radial(Offset.zero, effectiveR * 1.05, [
           const Color(0xFF7F5CFF).withValues(alpha: 0.18 * haloOpacity),
           const Color(0xFF7F5CFF).withValues(alpha: 0.0),
         ])
@@ -378,13 +386,13 @@ class _GalaxyPainter extends CustomPainter {
     for (var i = 0; i < particles.length; i++) {
       final p = particles[i];
       final angle = p.angle + rotation;
-      final x = cos(angle) * p.radius * maxR;
-      final y = sin(angle) * p.radius * maxR * _tilt;
+      final x = cos(angle) * p.radius * effectiveR;
+      final y = sin(angle) * p.radius * effectiveR * _tilt;
       final center = particleCenters[i];
       canvas.drawCircle(
         Offset(center.dx + x, center.dy + y),
         p.size,
-        Paint()..color = p.color.withValues(alpha: 0.85),
+        Paint()..color = p.color.withValues(alpha: starAlpha),
       );
     }
 
@@ -393,9 +401,9 @@ class _GalaxyPainter extends CustomPainter {
 
     canvas.drawCircle(
       Offset.zero,
-      maxR * 0.16,
+      effectiveR * 0.16,
       Paint()
-        ..shader = ui.Gradient.radial(Offset.zero, maxR * 0.16, [
+        ..shader = ui.Gradient.radial(Offset.zero, effectiveR * 0.16, [
           Colors.white.withValues(alpha: 0.95),
           const Color(0xFFFFE9B3).withValues(alpha: 0.5),
           const Color(0xFFFFE9B3).withValues(alpha: 0.0),
@@ -407,7 +415,7 @@ class _GalaxyPainter extends CustomPainter {
     // bright photon ring hugging the shadow's edge, then the black shadow
     // itself on top. The ring is squashed the same as the disc so it reads
     // as viewed at the same tilt.
-    final ringOuter = maxR * 0.17;
+    final ringOuter = effectiveR * 0.17;
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset.zero,
@@ -416,7 +424,7 @@ class _GalaxyPainter extends CustomPainter {
       ),
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = maxR * 0.05
+        ..strokeWidth = effectiveR * 0.05
         ..shader = ui.Gradient.radial(
           Offset.zero,
           ringOuter * 1.2,
@@ -426,7 +434,7 @@ class _GalaxyPainter extends CustomPainter {
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
     );
 
-    final holeR = maxR * 0.075;
+    final holeR = effectiveR * 0.075;
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset.zero,
@@ -435,7 +443,7 @@ class _GalaxyPainter extends CustomPainter {
       ),
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = max(1.5, maxR * 0.01)
+        ..strokeWidth = max(1.5, effectiveR * 0.01)
         ..color = Colors.white.withValues(alpha: 0.9)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
     );
@@ -588,7 +596,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 29;
+  static const int editCount = 30;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -694,6 +702,12 @@ class _GreetingPageState extends State<GreetingPage>
   List<_SupernovaSpark>? _explodeSparks;
   bool _hidden = false;
   double? _hiddenSince;
+
+  // How long the galaxy takes to grow from nothing back to full size after
+  // reappearing from an explosion; null once it's fully formed (or before
+  // it's ever exploded).
+  static const double _formationDuration = 2.6;
+  double? _formingSince;
 
   // A short, sharply decaying screen-shake right as the galaxy detonates.
   // Deterministic (driven by elapsed time, not fresh randomness each frame)
@@ -809,6 +823,18 @@ class _GreetingPageState extends State<GreetingPage>
     // instead of just popping into view at full brightness.
     _haloOpacity = 0.0;
     _dragReleasedAt = t;
+    // Grow from nothing up to full size over `_formationDuration` instead
+    // of appearing at full size immediately.
+    _formingSince = t;
+  }
+
+  // 0..1 growth toward full size right after reappearing; 1.0 the rest of
+  // the time (including on the very first, non-exploded appearance).
+  double _galaxyFormationProgress(double t) {
+    final since = _formingSince;
+    if (since == null) return 1.0;
+    final raw = ((t - since) / _formationDuration).clamp(0.0, 1.0);
+    return Curves.easeOutCubic.transform(raw);
   }
 
   void _updateGalaxyPhysics(double t, Size screenSize) {
@@ -830,6 +856,11 @@ class _GreetingPageState extends State<GreetingPage>
         _hiddenSince = t;
       }
       return;
+    }
+
+    final since = _formingSince;
+    if (since != null && t - since >= _formationDuration) {
+      _formingSince = null;
     }
 
     final lag = _particleLag;
@@ -999,6 +1030,7 @@ class _GreetingPageState extends State<GreetingPage>
                               maxR: _galaxyMaxR!,
                               blackHoleCenter: _galaxyTarget!,
                               haloOpacity: _haloOpacity,
+                              formation: _galaxyFormationProgress(t),
                             ),
                           ),
                         ),
