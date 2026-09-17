@@ -61,6 +61,39 @@ class _Star {
   }
 }
 
+// Draws the whole starfield in one pass instead of one Positioned+Container
+// widget per star — with ~175 stars rebuilding 60 times a second, that was
+// a lot of small widget/object churn for no visual benefit over a single
+// canvas of circles.
+class _StarsPainter extends CustomPainter {
+  _StarsPainter(this.stars, this.positions, this.t);
+
+  final List<_Star> stars;
+  // Each star's current top-left draw position, matching what the old
+  // per-star `Positioned` used — null means it's been swallowed by a
+  // wormhole and should be skipped entirely.
+  final List<Offset?> positions;
+  final double t;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (var i = 0; i < stars.length; i++) {
+      final pos = positions[i];
+      if (pos == null) continue;
+      final star = stars[i];
+      final center = pos + Offset(star.size / 2, star.size / 2);
+      canvas.drawCircle(
+        center,
+        star.size / 2,
+        Paint()..color = star.color.withValues(alpha: star.brightnessAt(t)),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _StarsPainter oldDelegate) => true;
+}
+
 class _CometFrame {
   const _CometFrame({
     required this.head,
@@ -872,7 +905,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 46;
+  static const int editCount = 47;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -912,6 +945,30 @@ class _GreetingPageState extends State<GreetingPage>
     Color(0xFFD86FFF),
     Color(0xFF5CE1FF),
   ];
+
+  // Built once instead of on every letter on every frame — the style itself
+  // never changes, only which letters are visible/transformed does.
+  static final TextStyle _titleLetterStyle = GoogleFonts.orbitron(
+    fontSize: 64,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
+    letterSpacing: 2,
+    shadows: [
+      Shadow(
+        color: const Color(0xFFB388FF).withValues(alpha: 0.75),
+        blurRadius: 6,
+      ),
+      Shadow(
+        color: const Color(0xFF5CE1FF).withValues(alpha: 0.45),
+        blurRadius: 14,
+      ),
+    ],
+  );
+
+  static final TextStyle _versionLabelStyle = GoogleFonts.comicNeue(
+    fontSize: 12,
+    color: Colors.white70,
+  );
 
   // A render object's current on-screen bounds, in the Stack's own
   // coordinate space.
@@ -994,6 +1051,10 @@ class _GreetingPageState extends State<GreetingPage>
         );
       }
 
+      // No wormhole to possibly start a new capture — skip the RenderBox
+      // lookup below entirely rather than measuring it for nothing every
+      // frame.
+      if (_wormholes.isEmpty) return _LetterEffect.none;
       final rect = _rectOf(_letterKeys[i]);
       if (rect == null) return _LetterEffect.none;
       for (final w in _wormholes) {
@@ -1484,12 +1545,16 @@ class _GreetingPageState extends State<GreetingPage>
   }
 
   // Pointer position on desktop (mouse) or a finger drag on touch devices
-  // both drive a subtle parallax shift of the starfield.
+  // both drive a subtle parallax shift of the starfield. No setState here —
+  // the animation controller's own repeating ticker already rebuilds this
+  // whole tree every frame (same as every other piece of interactive state
+  // in this file, e.g. the galaxy's drag target), so the next tick picks
+  // this up within a frame regardless.
   void _updateParallax(Offset localPosition, Size size) {
     if (size.width == 0 || size.height == 0) return;
     final dx = ((localPosition.dx / size.width - 0.5) * 2).clamp(-1.0, 1.0);
     final dy = ((localPosition.dy / size.height - 0.5) * 2).clamp(-1.0, 1.0);
-    setState(() => _parallax = Offset(dx, dy));
+    _parallax = Offset(dx, dy);
   }
 
   @override
@@ -1554,7 +1619,15 @@ class _GreetingPageState extends State<GreetingPage>
                       child: Stack(
                         key: _stageKey,
                         children: [
-                          for (final star in _stars) _buildStar(star, t, size),
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: _StarsPainter(
+                                _stars,
+                                _computeStarPositions(t, size),
+                                t,
+                              ),
+                            ),
+                          ),
                           Positioned.fill(
                             child: CustomPaint(
                               painter: _CometsPainter(_comets, t),
@@ -1640,33 +1713,8 @@ class _GreetingPageState extends State<GreetingPage>
                                                           .opacity,
                                                       child: Text(
                                                         _titleText[i],
-                                                        style: GoogleFonts.orbitron(
-                                                          fontSize: 64,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          color: Colors.white,
-                                                          letterSpacing: 2,
-                                                          shadows: [
-                                                            Shadow(
-                                                              color:
-                                                                  const Color(
-                                                                    0xFFB388FF,
-                                                                  ).withValues(
-                                                                    alpha: 0.75,
-                                                                  ),
-                                                              blurRadius: 6,
-                                                            ),
-                                                            Shadow(
-                                                              color:
-                                                                  const Color(
-                                                                    0xFF5CE1FF,
-                                                                  ).withValues(
-                                                                    alpha: 0.45,
-                                                                  ),
-                                                              blurRadius: 14,
-                                                            ),
-                                                          ],
-                                                        ),
+                                                        style:
+                                                            _titleLetterStyle,
                                                       ),
                                                     ),
                                                   ),
@@ -1715,10 +1763,7 @@ class _GreetingPageState extends State<GreetingPage>
                                 const SizedBox(width: 4),
                                 Text(
                                   'Test-v0.$editCount',
-                                  style: GoogleFonts.comicNeue(
-                                    fontSize: 12,
-                                    color: Colors.white70,
-                                  ),
+                                  style: _versionLabelStyle,
                                 ),
                               ],
                             ),
@@ -1769,33 +1814,24 @@ class _GreetingPageState extends State<GreetingPage>
     return result;
   }
 
-  Widget _buildStar(_Star star, double t, Size size) {
-    if (_wormholeCaptured.contains(star.seed)) {
-      if (star.brightnessAt(t) < 0.05) {
-        _wormholeCaptured.remove(star.seed);
-      } else {
-        return const SizedBox.shrink();
+  List<Offset?> _computeStarPositions(double t, Size size) {
+    return List<Offset?>.generate(_stars.length, (i) {
+      final star = _stars[i];
+      if (_wormholeCaptured.contains(star.seed)) {
+        if (star.brightnessAt(t) < 0.05) {
+          _wormholeCaptured.remove(star.seed);
+        } else {
+          return null;
+        }
       }
-    }
 
-    final basePos = Offset(
-      star.positionAt(t).dx * size.width,
-      star.positionAt(t).dy * size.height,
-    );
-    final pos = _wormholes.isEmpty
-        ? basePos
-        : (_wormholePulledPosition(star, basePos, t) ?? basePos);
-    return Positioned(
-      left: pos.dx,
-      top: pos.dy,
-      child: Container(
-        width: star.size,
-        height: star.size,
-        decoration: BoxDecoration(
-          color: star.color.withValues(alpha: star.brightnessAt(t)),
-          shape: BoxShape.circle,
-        ),
-      ),
-    );
+      final basePos = Offset(
+        star.positionAt(t).dx * size.width,
+        star.positionAt(t).dy * size.height,
+      );
+      return _wormholes.isEmpty
+          ? basePos
+          : (_wormholePulledPosition(star, basePos, t) ?? basePos);
+    });
   }
 }
