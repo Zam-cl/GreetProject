@@ -872,10 +872,24 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 45;
+  static const int editCount = 46;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
+
+  // On screens narrower than this, the whole scene is rendered at this
+  // reference width instead (see `_uiScaleFor`) and scaled back down to
+  // fit — everything (galaxy, title, comets, wormhole, etc.) ends up
+  // proportionally smaller on a phone without touching any of their
+  // individual sizes. Screens at or above this width are unaffected
+  // (scale stays 1.0), so desktop looks exactly as it did before.
+  static const double _uiReferenceWidth = 700.0;
+  static const double _uiMinScale = 0.5;
+
+  double _uiScaleFor(Size realSize) {
+    if (realSize.width >= _uiReferenceWidth) return 1.0;
+    return (realSize.width / _uiReferenceWidth).clamp(_uiMinScale, 1.0);
+  }
 
   // Fireworks set off by tapping the title. `_stageKey` marks the Stack
   // whose coordinate space the burst (and the painter's canvas) share;
@@ -1484,210 +1498,237 @@ class _GreetingPageState extends State<GreetingPage>
       backgroundColor: const Color.fromRGBO(24, 11, 29, 1),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final size = Size(constraints.maxWidth, constraints.maxHeight);
-          return Listener(
-            onPointerHover: (e) => _updateParallax(e.localPosition, size),
-            onPointerMove: (e) {
-              _updateParallax(e.localPosition, size);
-              _onGalaxyPointerMove(e);
-              _onBackgroundPointerMove(e);
-            },
-            onPointerDown: (e) {
-              _onGalaxyPointerDown(e);
-              _onBackgroundPointerDown(e);
-            },
-            onPointerUp: (e) {
-              _onGalaxyPointerUp(e);
-              _onBackgroundPointerUp(e);
-            },
-            onPointerCancel: (e) {
-              _onGalaxyPointerUp(e);
-              _onBackgroundPointerUp(e);
-            },
-            child: AnimatedBuilder(
-              animation: _controller,
-              builder: (context, _) {
-                final t = DateTime.now().millisecondsSinceEpoch / 1000.0;
-                _ensureGalaxyPhysics(size);
-                _updateGalaxyPhysics(t, size);
-                _updateWormholeTrigger(t);
-                final letterEffects = _computeLetterEffects(t);
-                final galaxyPull = _computeGalaxyWormholePull(t);
-                _fireworks.removeWhere((fw) => fw.isDoneAt(t));
-                _wormholes.removeWhere((w) => w.isDoneAt(t));
-                _galaxyParticlesCaptured.removeWhere((_, w) => w.isDoneAt(t));
-                return Transform.translate(
-                  offset: _explosionShakeOffset(t),
-                  child: Stack(
-                    key: _stageKey,
-                    children: [
-                      for (final star in _stars)
-                        _buildStar(star, t, constraints),
-                      Positioned.fill(
-                        child: CustomPaint(painter: _CometsPainter(_comets, t)),
-                      ),
-                      if (_exploding)
-                        Positioned.fill(
-                          child: CustomPaint(
-                            painter: _GalaxyExplosionPainter(
-                              particles: _galaxyParticles,
-                              startOffsets: _explodeStartOffsets!,
-                              velocities: _explodeVelocities!,
-                              sparks: _explodeSparks!,
-                              center: _explodeCenter!,
-                              startTime: _explodeStartTime!,
-                              t: t,
-                              maxR: _galaxyMaxR!,
+          final realSize = Size(constraints.maxWidth, constraints.maxHeight);
+          final scale = _uiScaleFor(realSize);
+          // Everything below is laid out and animated in this larger
+          // "virtual" size, then the whole thing is scaled back down to fit
+          // the real screen — on phones that reads as the whole scene
+          // shrinking; on anything at or above `_uiReferenceWidth` the
+          // scale is 1.0, so desktop is pixel-for-pixel unchanged.
+          final size = Size(realSize.width / scale, realSize.height / scale);
+          // FittedBox (not Transform.scale) because it lays its child out
+          // unconstrained by the real screen size before scaling the
+          // result to fit — Transform.scale alone would just clamp the
+          // SizedBox straight back down to the real size first.
+          return FittedBox(
+            fit: BoxFit.fill,
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: size.width,
+              height: size.height,
+              child: Listener(
+                onPointerHover: (e) => _updateParallax(e.localPosition, size),
+                onPointerMove: (e) {
+                  _updateParallax(e.localPosition, size);
+                  _onGalaxyPointerMove(e);
+                  _onBackgroundPointerMove(e);
+                },
+                onPointerDown: (e) {
+                  _onGalaxyPointerDown(e);
+                  _onBackgroundPointerDown(e);
+                },
+                onPointerUp: (e) {
+                  _onGalaxyPointerUp(e);
+                  _onBackgroundPointerUp(e);
+                },
+                onPointerCancel: (e) {
+                  _onGalaxyPointerUp(e);
+                  _onBackgroundPointerUp(e);
+                },
+                child: AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, _) {
+                    final t = DateTime.now().millisecondsSinceEpoch / 1000.0;
+                    _ensureGalaxyPhysics(size);
+                    _updateGalaxyPhysics(t, size);
+                    _updateWormholeTrigger(t);
+                    final letterEffects = _computeLetterEffects(t);
+                    final galaxyPull = _computeGalaxyWormholePull(t);
+                    _fireworks.removeWhere((fw) => fw.isDoneAt(t));
+                    _wormholes.removeWhere((w) => w.isDoneAt(t));
+                    _galaxyParticlesCaptured.removeWhere(
+                      (_, w) => w.isDoneAt(t),
+                    );
+                    return Transform.translate(
+                      offset: _explosionShakeOffset(t),
+                      child: Stack(
+                        key: _stageKey,
+                        children: [
+                          for (final star in _stars) _buildStar(star, t, size),
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: _CometsPainter(_comets, t),
                             ),
                           ),
-                        )
-                      else if (!_hidden)
-                        Positioned.fill(
-                          child: CustomPaint(
-                            painter: _GalaxyPainter(
-                              particles: _galaxyParticles,
-                              particleCenters: _particleLag!,
-                              rotation: t * 2 * pi / 45,
-                              maxR: _galaxyMaxR!,
-                              blackHoleCenter: _galaxyTarget!,
-                              haloOpacity: _haloOpacity,
-                              formation: _galaxyFormationProgress(t),
-                              wormholePull: galaxyPull.isEmpty
-                                  ? null
-                                  : galaxyPull,
-                              wormholeCaptured: _galaxyParticlesCaptured.isEmpty
-                                  ? null
-                                  : _galaxyParticlesCaptured.keys.toSet(),
+                          if (_exploding)
+                            Positioned.fill(
+                              child: CustomPaint(
+                                painter: _GalaxyExplosionPainter(
+                                  particles: _galaxyParticles,
+                                  startOffsets: _explodeStartOffsets!,
+                                  velocities: _explodeVelocities!,
+                                  sparks: _explodeSparks!,
+                                  center: _explodeCenter!,
+                                  startTime: _explodeStartTime!,
+                                  t: t,
+                                  maxR: _galaxyMaxR!,
+                                ),
+                              ),
+                            )
+                          else if (!_hidden)
+                            Positioned.fill(
+                              child: CustomPaint(
+                                painter: _GalaxyPainter(
+                                  particles: _galaxyParticles,
+                                  particleCenters: _particleLag!,
+                                  rotation: t * 2 * pi / 45,
+                                  maxR: _galaxyMaxR!,
+                                  blackHoleCenter: _galaxyTarget!,
+                                  haloOpacity: _haloOpacity,
+                                  formation: _galaxyFormationProgress(t),
+                                  wormholePull: galaxyPull.isEmpty
+                                      ? null
+                                      : galaxyPull,
+                                  wormholeCaptured:
+                                      _galaxyParticlesCaptured.isEmpty
+                                      ? null
+                                      : _galaxyParticlesCaptured.keys.toSet(),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Transform.translate(
-                            offset: Offset(
-                              _parallax.dx * -4,
-                              _parallax.dy * -4,
-                            ),
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: GestureDetector(
-                                key: _titleKey,
-                                behavior: HitTestBehavior.opaque,
-                                onTap: _spawnFirework,
-                                child: ShaderMask(
-                                  shaderCallback: (bounds) =>
-                                      const LinearGradient(
-                                        colors: _titleGradientColors,
-                                      ).createShader(bounds),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      for (
-                                        var i = 0;
-                                        i < _titleText.length;
-                                        i++
-                                      )
-                                        KeyedSubtree(
-                                          key: _letterKeys[i],
-                                          child: Transform.translate(
-                                            offset: letterEffects[i].offset,
-                                            child: Transform.rotate(
-                                              angle: letterEffects[i].rotation,
-                                              child: Transform.scale(
-                                                scale: letterEffects[i].scale,
-                                                child: Opacity(
-                                                  opacity:
-                                                      letterEffects[i].opacity,
-                                                  child: Text(
-                                                    _titleText[i],
-                                                    style: GoogleFonts.orbitron(
-                                                      fontSize: 64,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      color: Colors.white,
-                                                      letterSpacing: 2,
-                                                      shadows: [
-                                                        Shadow(
-                                                          color:
-                                                              const Color(
-                                                                0xFFB388FF,
-                                                              ).withValues(
-                                                                alpha: 0.75,
-                                                              ),
-                                                          blurRadius: 6,
+                          Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                              ),
+                              child: Transform.translate(
+                                offset: Offset(
+                                  _parallax.dx * -4,
+                                  _parallax.dy * -4,
+                                ),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: GestureDetector(
+                                    key: _titleKey,
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: _spawnFirework,
+                                    child: ShaderMask(
+                                      shaderCallback: (bounds) =>
+                                          const LinearGradient(
+                                            colors: _titleGradientColors,
+                                          ).createShader(bounds),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          for (
+                                            var i = 0;
+                                            i < _titleText.length;
+                                            i++
+                                          )
+                                            KeyedSubtree(
+                                              key: _letterKeys[i],
+                                              child: Transform.translate(
+                                                offset: letterEffects[i].offset,
+                                                child: Transform.rotate(
+                                                  angle:
+                                                      letterEffects[i].rotation,
+                                                  child: Transform.scale(
+                                                    scale:
+                                                        letterEffects[i].scale,
+                                                    child: Opacity(
+                                                      opacity: letterEffects[i]
+                                                          .opacity,
+                                                      child: Text(
+                                                        _titleText[i],
+                                                        style: GoogleFonts.orbitron(
+                                                          fontSize: 64,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: Colors.white,
+                                                          letterSpacing: 2,
+                                                          shadows: [
+                                                            Shadow(
+                                                              color:
+                                                                  const Color(
+                                                                    0xFFB388FF,
+                                                                  ).withValues(
+                                                                    alpha: 0.75,
+                                                                  ),
+                                                              blurRadius: 6,
+                                                            ),
+                                                            Shadow(
+                                                              color:
+                                                                  const Color(
+                                                                    0xFF5CE1FF,
+                                                                  ).withValues(
+                                                                    alpha: 0.45,
+                                                                  ),
+                                                              blurRadius: 14,
+                                                            ),
+                                                          ],
                                                         ),
-                                                        Shadow(
-                                                          color:
-                                                              const Color(
-                                                                0xFF5CE1FF,
-                                                              ).withValues(
-                                                                alpha: 0.45,
-                                                              ),
-                                                          blurRadius: 14,
-                                                        ),
-                                                      ],
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
                                               ),
                                             ),
-                                          ),
-                                        ),
-                                    ],
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: CustomPaint(
-                            painter: _FireworksPainter(_fireworks, t),
-                          ),
-                        ),
-                      ),
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: CustomPaint(
-                            painter: _WormholePainter(_wormholes, t),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        top: 4,
-                        right: 12,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              onPressed: () => web.window.location.reload(),
-                              icon: const Icon(Icons.refresh),
-                              iconSize: 16,
-                              color: Colors.white70,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              visualDensity: VisualDensity.compact,
-                              splashRadius: 16,
-                              tooltip: 'Reload',
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Test-v0.$editCount',
-                              style: GoogleFonts.comicNeue(
-                                fontSize: 12,
-                                color: Colors.white70,
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: CustomPaint(
+                                painter: _FireworksPainter(_fireworks, t),
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: CustomPaint(
+                                painter: _WormholePainter(_wormholes, t),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 4,
+                            right: 12,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  onPressed: () => web.window.location.reload(),
+                                  icon: const Icon(Icons.refresh),
+                                  iconSize: 16,
+                                  color: Colors.white70,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  visualDensity: VisualDensity.compact,
+                                  splashRadius: 16,
+                                  tooltip: 'Reload',
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Test-v0.$editCount',
+                                  style: GoogleFonts.comicNeue(
+                                    fontSize: 12,
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                );
-              },
+                    );
+                  },
+                ),
+              ),
             ),
           );
         },
@@ -1728,7 +1769,7 @@ class _GreetingPageState extends State<GreetingPage>
     return result;
   }
 
-  Widget _buildStar(_Star star, double t, BoxConstraints constraints) {
+  Widget _buildStar(_Star star, double t, Size size) {
     if (_wormholeCaptured.contains(star.seed)) {
       if (star.brightnessAt(t) < 0.05) {
         _wormholeCaptured.remove(star.seed);
@@ -1738,8 +1779,8 @@ class _GreetingPageState extends State<GreetingPage>
     }
 
     final basePos = Offset(
-      star.positionAt(t).dx * constraints.maxWidth,
-      star.positionAt(t).dy * constraints.maxHeight,
+      star.positionAt(t).dx * size.width,
+      star.positionAt(t).dy * size.height,
     );
     final pos = _wormholes.isEmpty
         ? basePos
