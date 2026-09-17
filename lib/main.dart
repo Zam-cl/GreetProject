@@ -76,11 +76,7 @@ class _CometFrame {
 }
 
 class _Comet {
-  const _Comet({
-    required this.seed,
-    required this.phase,
-    required this.period,
-  });
+  const _Comet({required this.seed, required this.phase, required this.period});
 
   final int seed;
   final double phase;
@@ -183,13 +179,16 @@ class _FireworkParticle {
 }
 
 class _Firework {
-  _Firework({required this.center, required this.startTime, required Size textSize})
-    : ringHalfWidth = textSize.width / 2 + 18,
-      ringHalfHeight = textSize.height / 2 + 18,
-      particles = _buildParticles(
-        textSize.width / 2 + 18,
-        textSize.height / 2 + 18,
-      );
+  _Firework({
+    required this.center,
+    required this.startTime,
+    required Size textSize,
+  }) : ringHalfWidth = textSize.width / 2 + 18,
+       ringHalfHeight = textSize.height / 2 + 18,
+       particles = _buildParticles(
+         textSize.width / 2 + 18,
+         textSize.height / 2 + 18,
+       );
 
   final Offset center;
   final double startTime;
@@ -247,9 +246,8 @@ class _FireworksPainter extends CustomPainter {
             height: fw.ringHalfHeight * 2.2,
           ),
           Paint()
-            ..color = const Color(
-              0xFFFFF59D,
-            ).withValues(alpha: (1 - flashT) * 0.7)
+            ..color = const Color(0xFFFFF59D)
+                .withValues(alpha: (1 - flashT) * 0.7)
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16),
         );
       }
@@ -260,7 +258,8 @@ class _FireworksPainter extends CustomPainter {
         final radial = p.speed * elapsed;
         final dx = cos(p.angle) * radial;
         final dy =
-            sin(p.angle) * radial + 0.5 * _Firework._gravity * elapsed * elapsed;
+            sin(p.angle) * radial +
+            0.5 * _Firework._gravity * elapsed * elapsed;
         final pos = fw.center + p.startOffset + Offset(dx, dy);
         final currentSize = (p.size * (1 - progress * 0.5)).clamp(
           0.3,
@@ -304,8 +303,7 @@ List<_GalaxyParticle> _buildGalaxyParticles() {
       final tNorm = i / perArm;
       final baseRadius = 0.1 + tNorm * 0.9;
       final winding = tNorm * 2.7 * 2 * pi;
-      final jitterAngle =
-          (random.nextDouble() - 0.5) * 0.3 * (1 - tNorm * 0.4);
+      final jitterAngle = (random.nextDouble() - 0.5) * 0.3 * (1 - tNorm * 0.4);
       final jitterRadius = (random.nextDouble() - 0.5) * 0.05;
       final r = (baseRadius + jitterRadius).clamp(0.05, 1.0);
       final angle = armOffset + winding + jitterAngle;
@@ -419,11 +417,12 @@ class _GalaxyPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = maxR * 0.05
-        ..shader = ui.Gradient.radial(Offset.zero, ringOuter * 1.2, [
-          const Color(0xFFFFE9B3),
-          Colors.white,
-          const Color(0xFFFF9D5C),
-        ], const [0.0, 0.75, 1.0])
+        ..shader = ui.Gradient.radial(
+          Offset.zero,
+          ringOuter * 1.2,
+          [const Color(0xFFFFE9B3), Colors.white, const Color(0xFFFF9D5C)],
+          const [0.0, 0.75, 1.0],
+        )
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
     );
 
@@ -456,13 +455,35 @@ class _GalaxyPainter extends CustomPainter {
   bool shouldRepaint(covariant _GalaxyPainter oldDelegate) => true;
 }
 
-// Drawn instead of `_GalaxyPainter` while the galaxy is mid-supernova: every
-// star flies straight outward from where the black hole was at the moment
-// of detonation, behind a blinding flash, all fading out together.
+class _SupernovaSpark {
+  const _SupernovaSpark({
+    required this.velocity,
+    required this.color,
+    required this.size,
+    required this.delay,
+  });
+
+  final Offset velocity; // px/s
+  final Color color;
+  final double size;
+  // A little ignition delay so the debris cloud doesn't all launch in one
+  // perfectly uniform pulse.
+  final double delay;
+}
+
+// Drawn instead of `_GalaxyPainter` while the galaxy is mid-supernova. Each
+// star keeps flying outward from wherever it actually was on screen the
+// instant the blast went off (`startOffsets`, its last drag-lag position
+// relative to the black hole) — not from a single point — so the burst picks
+// up exactly where the dragged galaxy left off instead of visibly collapsing
+// to a dot first. An extra layer of bright, fast `sparks` plus a full-screen
+// flash and an expanding shockwave ring sell the scale of the blast.
 class _GalaxyExplosionPainter extends CustomPainter {
   _GalaxyExplosionPainter({
     required this.particles,
+    required this.startOffsets,
     required this.velocities,
+    required this.sparks,
     required this.center,
     required this.startTime,
     required this.t,
@@ -470,39 +491,61 @@ class _GalaxyExplosionPainter extends CustomPainter {
   });
 
   final List<_GalaxyParticle> particles;
+  final List<Offset> startOffsets; // each particle's offset from center at t0
   final List<Offset> velocities; // px/s outward velocity per particle
+  final List<_SupernovaSpark> sparks;
   final Offset center;
   final double startTime;
   final double t;
   final double maxR;
 
-  static const double duration = 1.6;
-  static const double _flashDuration = 0.3;
+  static const double duration = 2.0;
+  static const double _flashDuration = 0.35;
 
   @override
   void paint(Canvas canvas, Size size) {
     final elapsed = (t - startTime).clamp(0.0, duration);
+    final progress = elapsed / duration;
 
+    // A camera-flash white-out across the whole screen plus a bright core
+    // flash, right at the moment of detonation.
     final flashT = (elapsed / _flashDuration).clamp(0.0, 1.0);
     if (flashT < 1) {
-      final flashR = maxR * (0.3 + 1.4 * flashT);
+      final screenFade = (1 - flashT) * (1 - flashT);
+      canvas.drawRect(
+        Offset.zero & size,
+        Paint()..color = Colors.white.withValues(alpha: screenFade * 0.55),
+      );
+      final flashR = maxR * (0.4 + 2.4 * flashT);
       canvas.drawCircle(
         center,
         flashR,
         Paint()
           ..shader = ui.Gradient.radial(center, flashR, [
-            Colors.white.withValues(alpha: (1 - flashT) * 0.9),
-            const Color(0xFFFFD9A0).withValues(alpha: (1 - flashT) * 0.4),
+            Colors.white.withValues(alpha: (1 - flashT) * 0.95),
+            const Color(0xFFFFD9A0).withValues(alpha: (1 - flashT) * 0.5),
             const Color(0xFFFFD9A0).withValues(alpha: 0.0),
           ])
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20),
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 24),
       );
     }
 
-    final progress = elapsed / duration;
+    // A shockwave ring that keeps rolling outward for the whole blast.
+    final ringRadius = maxR * (0.5 + 3.6 * progress);
+    canvas.drawCircle(
+      center,
+      ringRadius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = max(1.5, maxR * 0.06 * (1 - progress))
+        ..color = const Color(0xFFFFD9A0)
+            .withValues(alpha: (1 - progress) * 0.45)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+    );
+
     final fade = (1 - progress) * (1 - progress);
     for (var i = 0; i < particles.length; i++) {
-      final pos = center + velocities[i] * elapsed;
+      final pos = center + startOffsets[i] + velocities[i] * elapsed;
       final currentSize = (particles[i].size * (1.6 - progress)).clamp(
         0.3,
         double.infinity,
@@ -511,6 +554,23 @@ class _GalaxyExplosionPainter extends CustomPainter {
         pos,
         currentSize,
         Paint()..color = particles[i].color.withValues(alpha: fade),
+      );
+    }
+
+    for (final spark in sparks) {
+      final local = elapsed - spark.delay;
+      if (local <= 0) continue;
+      final sparkProgress = (local / (duration - spark.delay)).clamp(0.0, 1.0);
+      final sparkFade = (1 - sparkProgress) * (1 - sparkProgress);
+      final pos = center + spark.velocity * local;
+      final currentSize = (spark.size * (1.4 - sparkProgress)).clamp(
+        0.2,
+        double.infinity,
+      );
+      canvas.drawCircle(
+        pos,
+        currentSize,
+        Paint()..color = spark.color.withValues(alpha: sparkFade),
       );
     }
   }
@@ -528,7 +588,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 28;
+  static const int editCount = 29;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -629,9 +689,26 @@ class _GreetingPageState extends State<GreetingPage>
   bool _exploding = false;
   double? _explodeStartTime;
   Offset? _explodeCenter;
+  List<Offset>? _explodeStartOffsets;
   List<Offset>? _explodeVelocities;
+  List<_SupernovaSpark>? _explodeSparks;
   bool _hidden = false;
   double? _hiddenSince;
+
+  // A short, sharply decaying screen-shake right as the galaxy detonates.
+  // Deterministic (driven by elapsed time, not fresh randomness each frame)
+  // so it reads as one smooth judder instead of flickering noise.
+  static const double _shakeWindow = 0.5;
+  Offset _explosionShakeOffset(double t) {
+    if (!_exploding) return Offset.zero;
+    final start = _explodeStartTime;
+    if (start == null) return Offset.zero;
+    final elapsed = t - start;
+    if (elapsed > _shakeWindow) return Offset.zero;
+    final decay = 1 - elapsed / _shakeWindow;
+    final amplitude = 16 * decay * decay;
+    return Offset(sin(elapsed * 47) * amplitude, cos(elapsed * 61) * amplitude);
+  }
 
   void _ensureGalaxyPhysics(Size screenSize) {
     if (_galaxyTarget != null) return;
@@ -667,13 +744,49 @@ class _GreetingPageState extends State<GreetingPage>
 
   void _triggerGalaxyExplosion(double t) {
     final center = _galaxyTarget;
-    if (center == null) return;
+    final lag = _particleLag;
+    if (center == null || lag == null) return;
     final random = Random();
-    _explodeVelocities = List.generate(_galaxyParticles.length, (i) {
-      final angle = random.nextDouble() * 2 * pi;
-      final speed = 220 + random.nextDouble() * 420;
+
+    // Each star keeps exploding outward from wherever it actually was
+    // relative to the black hole the instant the blast went off, rather
+    // than from a single point — otherwise the spread-out galaxy visibly
+    // collapses to a dot for the first frame before "exploding" back out.
+    _explodeStartOffsets = List<Offset>.generate(
+      lag.length,
+      (i) => lag[i] - center,
+    );
+    _explodeVelocities = List<Offset>.generate(lag.length, (i) {
+      final fromCenter = _explodeStartOffsets![i];
+      final dist = fromCenter.distance;
+      // Particles already out on the arms keep flying along their existing
+      // radial direction; particles near the core (near-zero offset) get a
+      // random direction since there's no meaningful one to keep.
+      final baseAngle = dist > 4
+          ? atan2(fromCenter.dy, fromCenter.dx)
+          : random.nextDouble() * 2 * pi;
+      final angle = baseAngle + (random.nextDouble() - 0.5) * 0.6;
+      final speed = 260 + random.nextDouble() * 520;
       return Offset(cos(angle), sin(angle)) * speed;
     });
+
+    const sparkPalette = [
+      Colors.white,
+      Color(0xFFFFE9B3),
+      Color(0xFFFFB347),
+      Color(0xFFFF6B4A),
+    ];
+    _explodeSparks = List<_SupernovaSpark>.generate(240, (i) {
+      final angle = random.nextDouble() * 2 * pi;
+      final speed = 320 + random.nextDouble() * 680;
+      return _SupernovaSpark(
+        velocity: Offset(cos(angle), sin(angle)) * speed,
+        color: sparkPalette[random.nextInt(sparkPalette.length)],
+        size: 1.2 + random.nextDouble() * 2.6,
+        delay: random.nextDouble() * 0.15,
+      );
+    });
+
     _explodeCenter = center;
     _explodeStartTime = t;
     _exploding = true;
@@ -851,79 +964,87 @@ class _GreetingPageState extends State<GreetingPage>
                 _ensureGalaxyPhysics(size);
                 _updateGalaxyPhysics(t, size);
                 _fireworks.removeWhere((fw) => fw.isDoneAt(t));
-                return Stack(
-                  key: _stageKey,
-                  children: [
-                    for (final star in _stars)
-                      _buildStar(star, t, constraints),
-                    Positioned.fill(
-                      child: CustomPaint(painter: _CometsPainter(_comets, t)),
-                    ),
-                    if (_exploding)
+                return Transform.translate(
+                  offset: _explosionShakeOffset(t),
+                  child: Stack(
+                    key: _stageKey,
+                    children: [
+                      for (final star in _stars)
+                        _buildStar(star, t, constraints),
                       Positioned.fill(
-                        child: CustomPaint(
-                          painter: _GalaxyExplosionPainter(
-                            particles: _galaxyParticles,
-                            velocities: _explodeVelocities!,
-                            center: _explodeCenter!,
-                            startTime: _explodeStartTime!,
-                            t: t,
-                            maxR: _galaxyMaxR!,
-                          ),
-                        ),
-                      )
-                    else if (!_hidden)
-                      Positioned.fill(
-                        child: CustomPaint(
-                          painter: _GalaxyPainter(
-                            particles: _galaxyParticles,
-                            particleCenters: _particleLag!,
-                            rotation: t * 2 * pi / 45,
-                            maxR: _galaxyMaxR!,
-                            blackHoleCenter: _galaxyTarget!,
-                            haloOpacity: _haloOpacity,
-                          ),
-                        ),
+                        child: CustomPaint(painter: _CometsPainter(_comets, t)),
                       ),
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Transform.translate(
-                          offset: Offset(_parallax.dx * -4, _parallax.dy * -4),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: GestureDetector(
-                              key: _titleKey,
-                              behavior: HitTestBehavior.opaque,
-                              onTap: _spawnFirework,
-                              child: ShaderMask(
-                                shaderCallback: (bounds) =>
-                                    const LinearGradient(
-                                      colors: [
-                                        Color(0xFF7F5CFF),
-                                        Color(0xFFD86FFF),
-                                        Color(0xFF5CE1FF),
+                      if (_exploding)
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: _GalaxyExplosionPainter(
+                              particles: _galaxyParticles,
+                              startOffsets: _explodeStartOffsets!,
+                              velocities: _explodeVelocities!,
+                              sparks: _explodeSparks!,
+                              center: _explodeCenter!,
+                              startTime: _explodeStartTime!,
+                              t: t,
+                              maxR: _galaxyMaxR!,
+                            ),
+                          ),
+                        )
+                      else if (!_hidden)
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: _GalaxyPainter(
+                              particles: _galaxyParticles,
+                              particleCenters: _particleLag!,
+                              rotation: t * 2 * pi / 45,
+                              maxR: _galaxyMaxR!,
+                              blackHoleCenter: _galaxyTarget!,
+                              haloOpacity: _haloOpacity,
+                            ),
+                          ),
+                        ),
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Transform.translate(
+                            offset: Offset(
+                              _parallax.dx * -4,
+                              _parallax.dy * -4,
+                            ),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: GestureDetector(
+                                key: _titleKey,
+                                behavior: HitTestBehavior.opaque,
+                                onTap: _spawnFirework,
+                                child: ShaderMask(
+                                  shaderCallback: (bounds) =>
+                                      const LinearGradient(
+                                        colors: [
+                                          Color(0xFF7F5CFF),
+                                          Color(0xFFD86FFF),
+                                          Color(0xFF5CE1FF),
+                                        ],
+                                      ).createShader(bounds),
+                                  child: Text(
+                                    'Hello there!',
+                                    style: GoogleFonts.orbitron(
+                                      fontSize: 64,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                      letterSpacing: 2,
+                                      shadows: [
+                                        Shadow(
+                                          color: const Color(0xFFB388FF)
+                                              .withValues(alpha: 0.75),
+                                          blurRadius: 6,
+                                        ),
+                                        Shadow(
+                                          color: const Color(0xFF5CE1FF)
+                                              .withValues(alpha: 0.45),
+                                          blurRadius: 14,
+                                        ),
                                       ],
-                                    ).createShader(bounds),
-                                child: Text(
-                                  'Hello there!',
-                                  style: GoogleFonts.orbitron(
-                                    fontSize: 64,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                    letterSpacing: 2,
-                                    shadows: [
-                                      Shadow(
-                                        color: const Color(0xFFB388FF)
-                                            .withValues(alpha: 0.75),
-                                        blurRadius: 6,
-                                      ),
-                                      Shadow(
-                                        color: const Color(0xFF5CE1FF)
-                                            .withValues(alpha: 0.45),
-                                        blurRadius: 14,
-                                      ),
-                                    ],
+                                    ),
                                   ),
                                 ),
                               ),
@@ -931,43 +1052,43 @@ class _GreetingPageState extends State<GreetingPage>
                           ),
                         ),
                       ),
-                    ),
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: CustomPaint(
-                          painter: _FireworksPainter(_fireworks, t),
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: _FireworksPainter(_fireworks, t),
+                          ),
                         ),
                       ),
-                    ),
-                    Positioned(
-                      top: 4,
-                      right: 12,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            onPressed: () => web.window.location.reload(),
-                            icon: const Icon(Icons.refresh),
-                            iconSize: 16,
-                            color: Colors.white70,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            visualDensity: VisualDensity.compact,
-                            splashRadius: 16,
-                            tooltip: 'Reload',
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Test-v0.$editCount',
-                            style: GoogleFonts.comicNeue(
-                              fontSize: 12,
+                      Positioned(
+                        top: 4,
+                        right: 12,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              onPressed: () => web.window.location.reload(),
+                              icon: const Icon(Icons.refresh),
+                              iconSize: 16,
                               color: Colors.white70,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              visualDensity: VisualDensity.compact,
+                              splashRadius: 16,
+                              tooltip: 'Reload',
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 4),
+                            Text(
+                              'Test-v0.$editCount',
+                              style: GoogleFonts.comicNeue(
+                                fontSize: 12,
+                                color: Colors.white70,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 );
               },
             ),
