@@ -635,6 +635,28 @@ class _WormholeMote {
   );
 }
 
+// Shared by every "does this wormhole pull this in" check (background
+// stars, galaxy particles, title letters): 0..1 progress, easing from 0 up
+// to a full pull well before `_Wormhole.suckDuration` ends (so it reads as
+// a fast grab followed by a lingering hold — see `_Wormhole.captureFraction`).
+// `dist` only delays *when* the pull starts ramping up, never how far it
+// ultimately reaches, so anything within `influenceRadius` always ends up
+// fully captured rather than stalling partway.
+double _wormholePullFactor(
+  double elapsed,
+  double dist,
+  double influenceRadius,
+) {
+  final delay = (dist / influenceRadius) * 0.35;
+  final rawProgress =
+      (elapsed / (_Wormhole.suckDuration * _Wormhole.captureFraction)).clamp(
+        0.0,
+        1.0,
+      );
+  final adjusted = ((rawProgress - delay) / (1 - delay)).clamp(0.0, 1.0);
+  return Curves.easeOutCubic.transform(adjusted);
+}
+
 // A secret one-shot easter egg: hold a finger/click on empty sky (away from
 // the galaxy and the title) for a moment and a wormhole opens — a small
 // accretion vortex spirals nearby light in toward the press point, then
@@ -850,7 +872,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 44;
+  static const int editCount = 45;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -965,12 +987,11 @@ class _GreetingPageState extends State<GreetingPage>
         if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
         final dist = (w.center - rect.center).distance;
         if (dist > _Wormhole.partsInfluenceRadius) continue;
-        final delay = (dist / _Wormhole.partsInfluenceRadius) * 0.35;
-        final rawProgress =
-            (elapsed / (_Wormhole.suckDuration * _Wormhole.captureFraction))
-                .clamp(0.0, 1.0);
-        final adjusted = ((rawProgress - delay) / (1 - delay)).clamp(0.0, 1.0);
-        final pull = Curves.easeOutCubic.transform(adjusted);
+        final pull = _wormholePullFactor(
+          elapsed,
+          dist,
+          _Wormhole.partsInfluenceRadius,
+        );
         if (pull > 0.95) {
           _lettersEatenBy[i] = w;
           w.addCapturedColor(
@@ -1097,12 +1118,7 @@ class _GreetingPageState extends State<GreetingPage>
         if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
         final dist = (w.center - natural).distance;
         if (dist > influenceRadius) continue;
-        final delay = (dist / influenceRadius) * 0.35;
-        final rawProgress =
-            (elapsed / (_Wormhole.suckDuration * _Wormhole.captureFraction))
-                .clamp(0.0, 1.0);
-        final adjusted = ((rawProgress - delay) / (1 - delay)).clamp(0.0, 1.0);
-        final pull = Curves.easeOutCubic.transform(adjusted);
+        final pull = _wormholePullFactor(elapsed, dist, influenceRadius);
         pulls[i] = (w.center - natural) * pull;
         if (pull > 0.95) {
           _galaxyParticlesCaptured[i] = w;
@@ -1703,12 +1719,7 @@ class _GreetingPageState extends State<GreetingPage>
       if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
       final dist = (w.center - basePos).distance;
       if (dist > influenceRadius) continue;
-      final delay = (dist / influenceRadius) * 0.35;
-      final rawProgress =
-          (elapsed / (_Wormhole.suckDuration * _Wormhole.captureFraction))
-              .clamp(0.0, 1.0);
-      final adjusted = ((rawProgress - delay) / (1 - delay)).clamp(0.0, 1.0);
-      final pull = Curves.easeOutCubic.transform(adjusted);
+      final pull = _wormholePullFactor(elapsed, dist, influenceRadius);
       result = Offset.lerp(basePos, w.center, pull);
       if (pull > 0.95) {
         _wormholeCaptured.add(star.seed);
