@@ -465,12 +465,18 @@ class _GalaxyPainter extends CustomPainter {
 
 class _SupernovaSpark {
   const _SupernovaSpark({
+    required this.startOffset,
     required this.velocity,
     required this.color,
     required this.size,
     required this.delay,
   });
 
+  // Borrowed from one of the galaxy stars' own start offsets so the sparks
+  // ignite scattered across the same pre-explosion shape as the stars,
+  // instead of all bursting from the black hole's single point — which
+  // otherwise reads as two separate explosions layered on top of each other.
+  final Offset startOffset;
   final Offset velocity; // px/s
   final Color color;
   final double size;
@@ -570,7 +576,7 @@ class _GalaxyExplosionPainter extends CustomPainter {
       if (local <= 0) continue;
       final sparkProgress = (local / (duration - spark.delay)).clamp(0.0, 1.0);
       final sparkFade = (1 - sparkProgress) * (1 - sparkProgress);
-      final pos = center + spark.velocity * local;
+      final pos = center + spark.startOffset + spark.velocity * local;
       final currentSize = (spark.size * (1.4 - sparkProgress)).clamp(
         0.2,
         double.infinity,
@@ -596,7 +602,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 32;
+  static const int editCount = 33;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -799,10 +805,12 @@ class _GreetingPageState extends State<GreetingPage>
       Color(0xFFFFB347),
       Color(0xFFFF6B4A),
     ];
+    final startOffsets = _explodeStartOffsets!;
     _explodeSparks = List<_SupernovaSpark>.generate(240, (i) {
       final angle = random.nextDouble() * 2 * pi;
       final speed = 320 + random.nextDouble() * 680;
       return _SupernovaSpark(
+        startOffset: startOffsets[random.nextInt(startOffsets.length)],
         velocity: Offset(cos(angle), sin(angle)) * speed,
         color: sparkPalette[random.nextInt(sparkPalette.length)],
         size: 1.2 + random.nextDouble() * 2.6,
