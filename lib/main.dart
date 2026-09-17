@@ -593,6 +593,179 @@ class _GalaxyExplosionPainter extends CustomPainter {
   bool shouldRepaint(covariant _GalaxyExplosionPainter oldDelegate) => true;
 }
 
+class _WormholeMote {
+  const _WormholeMote({
+    required this.startAngle,
+    required this.startRadius,
+    required this.spinRate,
+    required this.burstAngle,
+    required this.burstSpeed,
+    required this.color,
+    required this.size,
+  });
+
+  final double startAngle; // radians, where it drifts in from
+  final double startRadius; // px from center, where it starts
+  final double spinRate; // extra spiral spin while falling in
+  final double
+  burstAngle; // radians, independent direction it flies once it bursts back out
+  final double burstSpeed; // px/s
+  final Color color;
+  final double size;
+}
+
+// A secret one-shot easter egg: hold a finger/click on empty sky (away from
+// the galaxy and the title) for a moment and a wormhole opens — a small
+// accretion vortex spirals nearby light in toward the press point, then
+// blinks and flings it all back out as a burst of shooting stars.
+class _Wormhole {
+  _Wormhole({required this.center, required this.startTime})
+    : motes = _buildMotes();
+
+  final Offset center;
+  final double startTime;
+  final List<_WormholeMote> motes;
+
+  static const double suckDuration = 1.0;
+  static const double flashDuration = 0.25;
+  static const double burstDuration = 1.3;
+  static const double totalDuration =
+      suckDuration + flashDuration + burstDuration;
+
+  static const List<Color> _palette = [
+    Color(0xFFB388FF),
+    Color(0xFF5CE1FF),
+    Colors.white,
+    Color(0xFF7F5CFF),
+  ];
+
+  static List<_WormholeMote> _buildMotes() {
+    final random = Random();
+    return List.generate(140, (i) {
+      return _WormholeMote(
+        startAngle: random.nextDouble() * 2 * pi,
+        startRadius: 60 + random.nextDouble() * 220,
+        spinRate: 6 + random.nextDouble() * 10,
+        burstAngle: random.nextDouble() * 2 * pi,
+        burstSpeed: 220 + random.nextDouble() * 380,
+        color: _palette[random.nextInt(_palette.length)],
+        size: 1.4 + random.nextDouble() * 2.2,
+      );
+    });
+  }
+
+  bool isDoneAt(double t) => t - startTime > totalDuration;
+}
+
+class _WormholePainter extends CustomPainter {
+  _WormholePainter(this.wormholes, this.t);
+
+  final List<_Wormhole> wormholes;
+  final double t;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final w in wormholes) {
+      final elapsed = t - w.startTime;
+      if (elapsed < 0 || elapsed > _Wormhole.totalDuration) continue;
+
+      if (elapsed < _Wormhole.suckDuration) {
+        _paintSuckIn(canvas, w, elapsed);
+      } else if (elapsed < _Wormhole.suckDuration + _Wormhole.flashDuration) {
+        _paintFlash(canvas, w, elapsed - _Wormhole.suckDuration);
+      } else {
+        _paintBurst(
+          canvas,
+          w,
+          elapsed - _Wormhole.suckDuration - _Wormhole.flashDuration,
+        );
+      }
+    }
+  }
+
+  void _paintSuckIn(Canvas canvas, _Wormhole w, double elapsed) {
+    final progress = (elapsed / _Wormhole.suckDuration).clamp(0.0, 1.0);
+
+    // A small dark accretion disc grows at the center as it swallows
+    // everything spiraling into it.
+    final discR = 6 + 40 * progress;
+    canvas.drawCircle(
+      w.center,
+      discR,
+      Paint()
+        ..shader = ui.Gradient.radial(w.center, discR, [
+          const Color(0xFF05010A),
+          const Color(0xFF1B0A2E).withValues(alpha: 0.6),
+          const Color(0xFF1B0A2E).withValues(alpha: 0.0),
+        ])
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+    );
+
+    final easeIn = progress * progress; // accelerating infall
+    for (final m in w.motes) {
+      final radius = m.startRadius * (1 - easeIn);
+      // Spins faster the closer it gets to the center, like real infalling
+      // matter speeding up toward the event horizon.
+      final angle = m.startAngle + m.spinRate * easeIn;
+      final pos =
+          w.center + Offset(cos(angle) * radius, sin(angle) * radius * 0.6);
+      final fade = (1 - progress * 0.3).clamp(0.0, 1.0);
+      final currentSize = max(0.3, m.size * (1.1 - progress * 0.5));
+      canvas.drawCircle(
+        pos,
+        currentSize,
+        Paint()..color = m.color.withValues(alpha: fade),
+      );
+    }
+  }
+
+  void _paintFlash(Canvas canvas, _Wormhole w, double elapsed) {
+    final flashT = (elapsed / _Wormhole.flashDuration).clamp(0.0, 1.0);
+    final r = 10 + 90 * flashT;
+    canvas.drawCircle(
+      w.center,
+      r,
+      Paint()
+        ..shader = ui.Gradient.radial(w.center, r, [
+          Colors.white.withValues(alpha: (1 - flashT) * 0.95),
+          const Color(0xFFB388FF).withValues(alpha: (1 - flashT) * 0.5),
+          const Color(0xFFB388FF).withValues(alpha: 0.0),
+        ])
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18),
+    );
+  }
+
+  void _paintBurst(Canvas canvas, _Wormhole w, double elapsed) {
+    final progress = (elapsed / _Wormhole.burstDuration).clamp(0.0, 1.0);
+    final fade = (1 - progress) * (1 - progress);
+    for (final m in w.motes) {
+      final dist = m.burstSpeed * elapsed;
+      final dir = Offset(cos(m.burstAngle), sin(m.burstAngle));
+      final head = w.center + dir * dist;
+      final tail = head - dir * (18 + 40 * progress);
+      canvas.drawLine(
+        tail,
+        head,
+        Paint()
+          ..strokeWidth = 1.6
+          ..strokeCap = StrokeCap.round
+          ..shader = ui.Gradient.linear(tail, head, [
+            m.color.withValues(alpha: 0),
+            m.color.withValues(alpha: fade),
+          ]),
+      );
+      canvas.drawCircle(
+        head,
+        m.size * 0.8,
+        Paint()..color = m.color.withValues(alpha: fade),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _WormholePainter oldDelegate) => true;
+}
+
 class GreetingPage extends StatefulWidget {
   const GreetingPage({super.key});
 
@@ -602,7 +775,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 33;
+  static const int editCount = 34;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -943,6 +1116,66 @@ class _GreetingPageState extends State<GreetingPage>
     _dragStartTime = null;
   }
 
+  // Secret wormhole easter egg: hold still on empty sky (not on the galaxy
+  // or the title) for `_wormholeHoldThreshold` seconds to open one.
+  final List<_Wormhole> _wormholes = [];
+  Offset? _wormholePressStart;
+  double? _wormholePressStartTime;
+  bool _wormholeCandidate = false;
+  static const double _wormholeHoldThreshold = 0.6;
+  static const double _wormholeMoveTolerance = 24;
+
+  void _onBackgroundPointerDown(PointerDownEvent event) {
+    if (_draggingGalaxy || _hidden || _exploding) return;
+    final titleRect = _currentTitleRect();
+    if (titleRect != null &&
+        titleRect.inflate(20).contains(event.localPosition)) {
+      return;
+    }
+    final target = _galaxyTarget;
+    final maxR = _galaxyMaxR;
+    if (target != null &&
+        maxR != null &&
+        (event.localPosition - target).distance <= maxR * 1.3) {
+      return;
+    }
+    _wormholePressStart = event.localPosition;
+    _wormholePressStartTime = DateTime.now().millisecondsSinceEpoch / 1000.0;
+    _wormholeCandidate = true;
+  }
+
+  void _onBackgroundPointerMove(PointerEvent event) {
+    if (!_wormholeCandidate) return;
+    final start = _wormholePressStart;
+    if (start == null) return;
+    if ((event.localPosition - start).distance > _wormholeMoveTolerance) {
+      _wormholeCandidate = false;
+      _wormholePressStart = null;
+      _wormholePressStartTime = null;
+    }
+  }
+
+  void _onBackgroundPointerUp(PointerEvent event) {
+    _wormholeCandidate = false;
+    _wormholePressStart = null;
+    _wormholePressStartTime = null;
+  }
+
+  // Checked every frame from the build loop, alongside the galaxy physics —
+  // opens the wormhole once a candidate press has been held long enough.
+  void _updateWormholeTrigger(double t) {
+    if (!_wormholeCandidate) return;
+    final start = _wormholePressStartTime;
+    final pos = _wormholePressStart;
+    if (start == null || pos == null) return;
+    if (t - start >= _wormholeHoldThreshold) {
+      _wormholeCandidate = false;
+      _wormholePressStart = null;
+      _wormholePressStartTime = null;
+      _wormholes.add(_Wormhole(center: pos, startTime: t));
+    }
+  }
+
   static final List<_Star> _stars = List.generate(175, (index) {
     final random = Random();
     return _Star(
@@ -1001,17 +1234,29 @@ class _GreetingPageState extends State<GreetingPage>
             onPointerMove: (e) {
               _updateParallax(e.localPosition, size);
               _onGalaxyPointerMove(e);
+              _onBackgroundPointerMove(e);
             },
-            onPointerDown: _onGalaxyPointerDown,
-            onPointerUp: _onGalaxyPointerUp,
-            onPointerCancel: _onGalaxyPointerUp,
+            onPointerDown: (e) {
+              _onGalaxyPointerDown(e);
+              _onBackgroundPointerDown(e);
+            },
+            onPointerUp: (e) {
+              _onGalaxyPointerUp(e);
+              _onBackgroundPointerUp(e);
+            },
+            onPointerCancel: (e) {
+              _onGalaxyPointerUp(e);
+              _onBackgroundPointerUp(e);
+            },
             child: AnimatedBuilder(
               animation: _controller,
               builder: (context, _) {
                 final t = DateTime.now().millisecondsSinceEpoch / 1000.0;
                 _ensureGalaxyPhysics(size);
                 _updateGalaxyPhysics(t, size);
+                _updateWormholeTrigger(t);
                 _fireworks.removeWhere((fw) => fw.isDoneAt(t));
+                _wormholes.removeWhere((w) => w.isDoneAt(t));
                 return Transform.translate(
                   offset: _explosionShakeOffset(t),
                   child: Stack(
@@ -1105,6 +1350,13 @@ class _GreetingPageState extends State<GreetingPage>
                         child: IgnorePointer(
                           child: CustomPaint(
                             painter: _FireworksPainter(_fireworks, t),
+                          ),
+                        ),
+                      ),
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: _WormholePainter(_wormholes, t),
                           ),
                         ),
                       ),
