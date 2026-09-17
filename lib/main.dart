@@ -905,7 +905,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 47;
+  static const int editCount = 48;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -1557,6 +1557,15 @@ class _GreetingPageState extends State<GreetingPage>
     _parallax = Offset(dx, dy);
   }
 
+  // Secret: tapping the version label hides the mouse cursor for 10s.
+  static const double _cursorHideDuration = 10.0;
+  double? _cursorHiddenUntil;
+
+  void _hideCursor() {
+    _cursorHiddenUntil =
+        DateTime.now().millisecondsSinceEpoch / 1000.0 + _cursorHideDuration;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1614,161 +1623,175 @@ class _GreetingPageState extends State<GreetingPage>
                     _galaxyParticlesCaptured.removeWhere(
                       (_, w) => w.isDoneAt(t),
                     );
-                    return Transform.translate(
-                      offset: _explosionShakeOffset(t),
-                      child: Stack(
-                        key: _stageKey,
-                        children: [
-                          Positioned.fill(
-                            child: CustomPaint(
-                              painter: _StarsPainter(
-                                _stars,
-                                _computeStarPositions(t, size),
-                                t,
-                              ),
-                            ),
-                          ),
-                          Positioned.fill(
-                            child: CustomPaint(
-                              painter: _CometsPainter(_comets, t),
-                            ),
-                          ),
-                          if (_exploding)
+                    final cursorHidden =
+                        _cursorHiddenUntil != null && t < _cursorHiddenUntil!;
+                    return MouseRegion(
+                      cursor: cursorHidden
+                          ? SystemMouseCursors.none
+                          : MouseCursor.defer,
+                      child: Transform.translate(
+                        offset: _explosionShakeOffset(t),
+                        child: Stack(
+                          key: _stageKey,
+                          children: [
                             Positioned.fill(
                               child: CustomPaint(
-                                painter: _GalaxyExplosionPainter(
-                                  particles: _galaxyParticles,
-                                  startOffsets: _explodeStartOffsets!,
-                                  velocities: _explodeVelocities!,
-                                  sparks: _explodeSparks!,
-                                  center: _explodeCenter!,
-                                  startTime: _explodeStartTime!,
-                                  t: t,
-                                  maxR: _galaxyMaxR!,
-                                ),
-                              ),
-                            )
-                          else if (!_hidden)
-                            Positioned.fill(
-                              child: CustomPaint(
-                                painter: _GalaxyPainter(
-                                  particles: _galaxyParticles,
-                                  particleCenters: _particleLag!,
-                                  rotation: t * 2 * pi / 45,
-                                  maxR: _galaxyMaxR!,
-                                  blackHoleCenter: _galaxyTarget!,
-                                  haloOpacity: _haloOpacity,
-                                  formation: _galaxyFormationProgress(t),
-                                  wormholePull: galaxyPull.isEmpty
-                                      ? null
-                                      : galaxyPull,
-                                  wormholeCaptured:
-                                      _galaxyParticlesCaptured.isEmpty
-                                      ? null
-                                      : _galaxyParticlesCaptured.keys.toSet(),
+                                painter: _StarsPainter(
+                                  _stars,
+                                  _computeStarPositions(t, size),
+                                  t,
                                 ),
                               ),
                             ),
-                          Center(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
+                            Positioned.fill(
+                              child: CustomPaint(
+                                painter: _CometsPainter(_comets, t),
                               ),
-                              child: Transform.translate(
-                                offset: Offset(
-                                  _parallax.dx * -4,
-                                  _parallax.dy * -4,
+                            ),
+                            if (_exploding)
+                              Positioned.fill(
+                                child: CustomPaint(
+                                  painter: _GalaxyExplosionPainter(
+                                    particles: _galaxyParticles,
+                                    startOffsets: _explodeStartOffsets!,
+                                    velocities: _explodeVelocities!,
+                                    sparks: _explodeSparks!,
+                                    center: _explodeCenter!,
+                                    startTime: _explodeStartTime!,
+                                    t: t,
+                                    maxR: _galaxyMaxR!,
+                                  ),
                                 ),
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: GestureDetector(
-                                    key: _titleKey,
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: _spawnFirework,
-                                    child: ShaderMask(
-                                      shaderCallback: (bounds) =>
-                                          const LinearGradient(
-                                            colors: _titleGradientColors,
-                                          ).createShader(bounds),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          for (
-                                            var i = 0;
-                                            i < _titleText.length;
-                                            i++
-                                          )
-                                            KeyedSubtree(
-                                              key: _letterKeys[i],
-                                              child: Transform.translate(
-                                                offset: letterEffects[i].offset,
-                                                child: Transform.rotate(
-                                                  angle:
-                                                      letterEffects[i].rotation,
-                                                  child: Transform.scale(
-                                                    scale:
-                                                        letterEffects[i].scale,
-                                                    child: Opacity(
-                                                      opacity: letterEffects[i]
-                                                          .opacity,
-                                                      child: Text(
-                                                        _titleText[i],
-                                                        style:
-                                                            _titleLetterStyle,
+                              )
+                            else if (!_hidden)
+                              Positioned.fill(
+                                child: CustomPaint(
+                                  painter: _GalaxyPainter(
+                                    particles: _galaxyParticles,
+                                    particleCenters: _particleLag!,
+                                    rotation: t * 2 * pi / 45,
+                                    maxR: _galaxyMaxR!,
+                                    blackHoleCenter: _galaxyTarget!,
+                                    haloOpacity: _haloOpacity,
+                                    formation: _galaxyFormationProgress(t),
+                                    wormholePull: galaxyPull.isEmpty
+                                        ? null
+                                        : galaxyPull,
+                                    wormholeCaptured:
+                                        _galaxyParticlesCaptured.isEmpty
+                                        ? null
+                                        : _galaxyParticlesCaptured.keys.toSet(),
+                                  ),
+                                ),
+                              ),
+                            Center(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                ),
+                                child: Transform.translate(
+                                  offset: Offset(
+                                    _parallax.dx * -4,
+                                    _parallax.dy * -4,
+                                  ),
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: GestureDetector(
+                                      key: _titleKey,
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: _spawnFirework,
+                                      child: ShaderMask(
+                                        shaderCallback: (bounds) =>
+                                            const LinearGradient(
+                                              colors: _titleGradientColors,
+                                            ).createShader(bounds),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            for (
+                                              var i = 0;
+                                              i < _titleText.length;
+                                              i++
+                                            )
+                                              KeyedSubtree(
+                                                key: _letterKeys[i],
+                                                child: Transform.translate(
+                                                  offset:
+                                                      letterEffects[i].offset,
+                                                  child: Transform.rotate(
+                                                    angle: letterEffects[i]
+                                                        .rotation,
+                                                    child: Transform.scale(
+                                                      scale: letterEffects[i]
+                                                          .scale,
+                                                      child: Opacity(
+                                                        opacity:
+                                                            letterEffects[i]
+                                                                .opacity,
+                                                        child: Text(
+                                                          _titleText[i],
+                                                          style:
+                                                              _titleLetterStyle,
+                                                        ),
                                                       ),
                                                     ),
                                                   ),
                                                 ),
                                               ),
-                                            ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                          Positioned.fill(
-                            child: IgnorePointer(
-                              child: CustomPaint(
-                                painter: _FireworksPainter(_fireworks, t),
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: CustomPaint(
+                                  painter: _FireworksPainter(_fireworks, t),
+                                ),
                               ),
                             ),
-                          ),
-                          Positioned.fill(
-                            child: IgnorePointer(
-                              child: CustomPaint(
-                                painter: _WormholePainter(_wormholes, t),
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: CustomPaint(
+                                  painter: _WormholePainter(_wormholes, t),
+                                ),
                               ),
                             ),
-                          ),
-                          Positioned(
-                            top: 4,
-                            right: 12,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  onPressed: () => web.window.location.reload(),
-                                  icon: const Icon(Icons.refresh),
-                                  iconSize: 16,
-                                  color: Colors.white70,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                  visualDensity: VisualDensity.compact,
-                                  splashRadius: 16,
-                                  tooltip: 'Reload',
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Test-v0.$editCount',
-                                  style: _versionLabelStyle,
-                                ),
-                              ],
+                            Positioned(
+                              top: 4,
+                              right: 12,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    onPressed: () =>
+                                        web.window.location.reload(),
+                                    icon: const Icon(Icons.refresh),
+                                    iconSize: 16,
+                                    color: Colors.white70,
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    visualDensity: VisualDensity.compact,
+                                    splashRadius: 16,
+                                    tooltip: 'Reload',
+                                  ),
+                                  const SizedBox(width: 4),
+                                  GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: _hideCursor,
+                                    child: Text(
+                                      'Test-v0.$editCount',
+                                      style: _versionLabelStyle,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     );
                   },
