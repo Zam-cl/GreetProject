@@ -632,11 +632,14 @@ class _Wormhole {
   static const double totalDuration =
       suckDuration + flashDuration + burstDuration;
 
+  // Matches the actual starfield's own colors (see `_stars` below) so the
+  // motes read as real stars being pulled in, not a differently-colored
+  // effect layered on top.
   static const List<Color> _palette = [
-    Color(0xFFB388FF),
-    Color(0xFF5CE1FF),
     Colors.white,
-    Color(0xFF7F5CFF),
+    Colors.yellow,
+    Color(0xFFFFF3C4),
+    Color(0xFFE8F4FF),
   ];
 
   static List<_WormholeMote> _buildMotes() {
@@ -775,7 +778,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 34;
+  static const int editCount = 35;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -1399,11 +1402,37 @@ class _GreetingPageState extends State<GreetingPage>
     );
   }
 
+  // Pulls a screen position toward any wormhole currently in its suck-in
+  // phase, stronger the closer the point already is and the further along
+  // the pull has gotten — this is what actually drags the real stars in,
+  // rather than just showing a separate effect near them.
+  Offset _applyWormholePull(Offset pos, double t) {
+    var result = pos;
+    const influenceRadius = 260.0;
+    for (final w in _wormholes) {
+      final elapsed = t - w.startTime;
+      if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
+      final dist = (w.center - result).distance;
+      if (dist > influenceRadius || dist < 1) continue;
+      final progress = (elapsed / _Wormhole.suckDuration).clamp(0.0, 1.0);
+      final pull = ((1 - dist / influenceRadius) * progress * progress).clamp(
+        0.0,
+        0.96,
+      );
+      result = Offset.lerp(result, w.center, pull)!;
+    }
+    return result;
+  }
+
   Widget _buildStar(_Star star, double t, BoxConstraints constraints) {
-    final pos = star.positionAt(t);
+    final basePos = Offset(
+      star.positionAt(t).dx * constraints.maxWidth,
+      star.positionAt(t).dy * constraints.maxHeight,
+    );
+    final pos = _wormholes.isEmpty ? basePos : _applyWormholePull(basePos, t);
     return Positioned(
-      left: pos.dx * constraints.maxWidth,
-      top: pos.dy * constraints.maxHeight,
+      left: pos.dx,
+      top: pos.dy,
       child: Container(
         width: star.size,
         height: star.size,
