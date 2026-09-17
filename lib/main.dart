@@ -163,6 +163,104 @@ class _CometsPainter extends CustomPainter {
   bool shouldRepaint(covariant _CometsPainter oldDelegate) => true;
 }
 
+class _FireworkParticle {
+  const _FireworkParticle({
+    required this.angle,
+    required this.speed,
+    required this.color,
+    required this.size,
+  });
+
+  final double angle; // travel direction, radians
+  final double speed; // pixels per second
+  final Color color;
+  final double size;
+}
+
+class _Firework {
+  _Firework({required this.origin, required this.startTime})
+      : particles = _buildParticles();
+
+  final Offset origin;
+  final double startTime;
+  final List<_FireworkParticle> particles;
+
+  static const double lifespan = 1.1;
+  static const double _gravity = 220; // px/s^2, pulls the sparks down
+
+  static const List<Color> _palette = [
+    Color(0xFFFF5C5C),
+    Color(0xFFFFD15C),
+    Color(0xFF5CFF8F),
+    Color(0xFF5CD1FF),
+    Color(0xFFB388FF),
+    Color(0xFFFF8FD0),
+  ];
+
+  static List<_FireworkParticle> _buildParticles() {
+    final random = Random();
+    return List.generate(44, (i) {
+      return _FireworkParticle(
+        angle: random.nextDouble() * 2 * pi,
+        speed: 60 + random.nextDouble() * 150,
+        color: _palette[random.nextInt(_palette.length)],
+        size: 2.0 + random.nextDouble() * 2.2,
+      );
+    });
+  }
+
+  bool isDoneAt(double t) => t - startTime > lifespan;
+}
+
+class _FireworksPainter extends CustomPainter {
+  _FireworksPainter(this.fireworks, this.t);
+
+  final List<_Firework> fireworks;
+  final double t;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final fw in fireworks) {
+      final elapsed = t - fw.startTime;
+      if (elapsed < 0 || elapsed > _Firework.lifespan) continue;
+
+      // A quick bright pop at the moment of the burst.
+      if (elapsed < 0.12) {
+        final flashT = elapsed / 0.12;
+        canvas.drawCircle(
+          fw.origin,
+          10 + 40 * (1 - flashT),
+          Paint()
+            ..color = Colors.white.withValues(alpha: (1 - flashT) * 0.8)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+        );
+      }
+
+      final progress = (elapsed / _Firework.lifespan).clamp(0.0, 1.0);
+      final fade = (1 - progress) * (1 - progress);
+      for (final p in fw.particles) {
+        final radial = p.speed * elapsed;
+        final dx = cos(p.angle) * radial;
+        final dy =
+            sin(p.angle) * radial + 0.5 * _Firework._gravity * elapsed * elapsed;
+        final pos = fw.origin + Offset(dx, dy);
+        final currentSize = (p.size * (1 - progress * 0.5)).clamp(
+          0.3,
+          double.infinity,
+        );
+        canvas.drawCircle(
+          pos,
+          currentSize,
+          Paint()..color = p.color.withValues(alpha: fade),
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _FireworksPainter oldDelegate) => true;
+}
+
 class _GalaxyParticle {
   const _GalaxyParticle({
     required this.radius,
@@ -349,10 +447,23 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 25;
+  static const int editCount = 26;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
+
+  // Fireworks set off by tapping the title. `_stageKey` marks the Stack
+  // whose coordinate space the burst origin (and the painter's canvas) share.
+  final GlobalKey _stageKey = GlobalKey();
+  final List<_Firework> _fireworks = [];
+
+  void _spawnFirework(Offset globalPosition) {
+    final box = _stageKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final local = box.globalToLocal(globalPosition);
+    setState(() => _fireworks.add(_Firework(origin: local, startTime:
+        DateTime.now().millisecondsSinceEpoch / 1000.0)));
+  }
 
   // Picked once (lazily, as soon as the screen size is known) so the
   // galaxy sits in one random spot per app load instead of jumping
@@ -555,7 +666,9 @@ class _GreetingPageState extends State<GreetingPage>
                 final t = DateTime.now().millisecondsSinceEpoch / 1000.0;
                 _ensureGalaxyPhysics(size);
                 _updateGalaxyPhysics(t);
+                _fireworks.removeWhere((fw) => fw.isDoneAt(t));
                 return Stack(
+                  key: _stageKey,
                   children: [
                     for (final star in _stars)
                       _buildStar(star, t, constraints),
@@ -581,38 +694,50 @@ class _GreetingPageState extends State<GreetingPage>
                           offset: Offset(_parallax.dx * -4, _parallax.dy * -4),
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
-                            child: ShaderMask(
-                              shaderCallback: (bounds) =>
-                                  const LinearGradient(
-                                    colors: [
-                                      Color(0xFF7F5CFF),
-                                      Color(0xFFD86FFF),
-                                      Color(0xFF5CE1FF),
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTapUp: (details) =>
+                                  _spawnFirework(details.globalPosition),
+                              child: ShaderMask(
+                                shaderCallback: (bounds) =>
+                                    const LinearGradient(
+                                      colors: [
+                                        Color(0xFF7F5CFF),
+                                        Color(0xFFD86FFF),
+                                        Color(0xFF5CE1FF),
+                                      ],
+                                    ).createShader(bounds),
+                                child: Text(
+                                  'Hello there!',
+                                  style: GoogleFonts.orbitron(
+                                    fontSize: 64,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                    letterSpacing: 2,
+                                    shadows: [
+                                      Shadow(
+                                        color: const Color(0xFFB388FF)
+                                            .withValues(alpha: 0.75),
+                                        blurRadius: 6,
+                                      ),
+                                      Shadow(
+                                        color: const Color(0xFF5CE1FF)
+                                            .withValues(alpha: 0.45),
+                                        blurRadius: 14,
+                                      ),
                                     ],
-                                  ).createShader(bounds),
-                              child: Text(
-                                'Hello there!',
-                                style: GoogleFonts.orbitron(
-                                  fontSize: 64,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  letterSpacing: 2,
-                                  shadows: [
-                                    Shadow(
-                                      color: const Color(0xFFB388FF)
-                                          .withValues(alpha: 0.75),
-                                      blurRadius: 6,
-                                    ),
-                                    Shadow(
-                                      color: const Color(0xFF5CE1FF)
-                                          .withValues(alpha: 0.45),
-                                      blurRadius: 14,
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
+                        ),
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: _FireworksPainter(_fireworks, t),
                         ),
                       ),
                     ),
