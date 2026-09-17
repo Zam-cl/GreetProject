@@ -338,6 +338,8 @@ class _GalaxyPainter extends CustomPainter {
     required this.blackHoleCenter,
     required this.haloOpacity,
     this.formation = 1.0,
+    this.wormholePull,
+    this.wormholeCaptured,
   });
 
   final List<_GalaxyParticle> particles;
@@ -355,6 +357,12 @@ class _GalaxyPainter extends CustomPainter {
   // explosion, so it visibly condenses back into being instead of just
   // popping into view at full size; 1.0 the rest of the time.
   final double formation;
+  // Per-particle additive offset from a nearby wormhole pulling it in, and
+  // the set of particle indices already fully swallowed (skipped entirely)
+  // — see `_GreetingPageState._computeGalaxyWormholePull`. Null when no
+  // wormhole is currently close enough to affect any particle.
+  final List<Offset>? wormholePull;
+  final Set<int>? wormholeCaptured;
 
   // Squash the disc vertically so it reads as a tilted spiral, like a real
   // galaxy seen at an angle rather than flat-on.
@@ -384,13 +392,16 @@ class _GalaxyPainter extends CustomPainter {
     // itself tumbling as it rotates. Each star orbits around its own
     // (possibly lagging) center rather than a single shared point.
     for (var i = 0; i < particles.length; i++) {
+      if (wormholeCaptured != null && wormholeCaptured!.contains(i)) continue;
       final p = particles[i];
       final angle = p.angle + rotation;
       final x = cos(angle) * p.radius * effectiveR;
       final y = sin(angle) * p.radius * effectiveR * _tilt;
       final center = particleCenters[i];
+      var pos = Offset(center.dx + x, center.dy + y);
+      if (wormholePull != null) pos += wormholePull![i];
       canvas.drawCircle(
-        Offset(center.dx + x, center.dy + y),
+        pos,
         p.size,
         Paint()..color = p.color.withValues(alpha: starAlpha),
       );
@@ -774,12 +785,38 @@ class _WormholePainter extends CustomPainter {
   bool shouldRepaint(covariant _WormholePainter oldDelegate) => true;
 }
 
-// Render-time result of `_GreetingPageState._updateTitleWormhole`: how far
-// off its normal spot to draw the title, and how visible it should be.
-class _TitlePull {
-  const _TitlePull(this.offset, this.opacity);
-  final Offset offset;
-  final double opacity;
+// Render-time result of `_GreetingPageState._updateTitleWormhole`: where (in
+// the title's own local coordinates) a wormhole is biting into it, and how
+// big that bite currently is. `center == null` means no bite at all.
+class _TitleHole {
+  const _TitleHole(this.center, this.radius);
+  final Offset? center;
+  final double radius;
+}
+
+// Clips a growing (or shrinking) circular hole out of the title, centered
+// wherever a wormhole is relative to it — this is what makes the title look
+// like it's being eaten into from the wormhole's direction, in parts,
+// rather than fading away as a whole.
+class _EatenTextClipper extends CustomClipper<Path> {
+  const _EatenTextClipper({required this.holeCenter, required this.holeRadius});
+
+  final Offset holeCenter;
+  final double holeRadius;
+
+  @override
+  Path getClip(Size size) {
+    final full = Path()..addRect(Offset.zero & size);
+    if (holeRadius <= 0) return full;
+    final hole = Path()
+      ..addOval(Rect.fromCircle(center: holeCenter, radius: holeRadius));
+    return Path.combine(PathOperation.difference, full, hole);
+  }
+
+  @override
+  bool shouldReclip(covariant _EatenTextClipper oldClipper) =>
+      oldClipper.holeCenter != holeCenter ||
+      oldClipper.holeRadius != holeRadius;
 }
 
 class GreetingPage extends StatefulWidget {
@@ -791,7 +828,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 39;
+  static const int editCount = 40;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -832,20 +869,30 @@ class _GreetingPageState extends State<GreetingPage>
     );
   }
 
-  // If a wormhole opens close enough to the title, it gets pulled in and
-  // swallowed too, then fades back in at its normal spot once the wormhole
-  // is fully done. The title has no natural "invisible moment" to hide the
-  // reset the way a twinkling star does, so instead its rest position is
-  // captured once (`_titleRestCenter`) and restored while still at opacity
-  // 0, then it's the opacity alone that eases back in — never a visible
-  // jump.
-  _Wormhole? _titleSuckedBy;
-  Offset? _titleRestCenter;
+  // Converts a point in the Stack's coordinate space into the title's own
+  // local coordinates — used to place the wormhole's eaten-hole clip
+  // exactly where the wormhole actually is relative to the text, through
+  // whatever transforms (parallax, FittedBox scaling) sit in between.
+  Offset? _stageToTitleLocal(Offset stagePos) {
+    final stageBox = _stageKey.currentContext?.findRenderObject() as RenderBox?;
+    final titleBox = _titleKey.currentContext?.findRenderObject() as RenderBox?;
+    if (stageBox == null || titleBox == null) return null;
+    return titleBox.globalToLocal(stageBox.localToGlobal(stagePos));
+  }
+
+  // If a wormhole opens close enough to the title, it eats a growing
+  // circular hole into it centered wherever the wormhole actually is
+  // relative to the text (see `_EatenTextClipper`) — rather than the whole
+  // title fading as one piece — then the hole shrinks back down once the
+  // wormhole is fully done, revealing the text again.
+  _Wormhole? _titleEatenBy;
+  Offset? _titleHoleStageCenter;
+  double _titleHoleMaxRadius = 0;
   double? _titleReformStart;
   static const double _titleReformDuration = 1.0;
 
-  _TitlePull _updateTitleWormhole(double t) {
-    if (_titleSuckedBy == null) {
+  _TitleHole _updateTitleWormhole(double t) {
+    if (_titleEatenBy == null && _titleReformStart == null) {
       final rect = _currentTitleRect();
       if (rect != null) {
         for (final w in _wormholes) {
@@ -853,46 +900,55 @@ class _GreetingPageState extends State<GreetingPage>
           if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
           final pullRadius = max(rect.width, rect.height) / 2 + 220;
           if ((w.center - rect.center).distance <= pullRadius) {
-            _titleSuckedBy = w;
-            _titleRestCenter = rect.center;
+            _titleEatenBy = w;
+            _titleHoleStageCenter = w.center;
+            // The diagonal guarantees the hole can fully cover the text no
+            // matter where within (or near) it the wormhole is centered.
+            _titleHoleMaxRadius = Offset(rect.width, rect.height).distance;
             break;
           }
         }
       }
     }
 
-    final capturedBy = _titleSuckedBy;
+    final capturedBy = _titleEatenBy;
     if (capturedBy != null) {
       if (capturedBy.isDoneAt(t)) {
-        _titleSuckedBy = null;
-        _titleRestCenter = null;
+        _titleEatenBy = null;
         _titleReformStart = t;
       } else {
-        final rest = _titleRestCenter;
-        if (rest == null) return const _TitlePull(Offset.zero, 1.0);
+        final stageCenter = _titleHoleStageCenter;
+        final local = stageCenter == null
+            ? null
+            : _stageToTitleLocal(stageCenter);
+        if (local == null) return const _TitleHole(null, 0);
         final elapsed = t - capturedBy.startTime;
         final rawProgress =
             (elapsed / (_Wormhole.suckDuration * _Wormhole.captureFraction))
                 .clamp(0.0, 1.0);
-        final pull = Curves.easeOutCubic.transform(rawProgress);
-        final offset = (capturedBy.center - rest) * pull;
-        final opacity = (1 - pull * 1.3).clamp(0.0, 1.0);
-        return _TitlePull(offset, opacity);
+        final eased = Curves.easeOutCubic.transform(rawProgress);
+        return _TitleHole(local, eased * _titleHoleMaxRadius);
       }
     }
 
     final reformStart = _titleReformStart;
     if (reformStart != null) {
+      final stageCenter = _titleHoleStageCenter;
+      final local = stageCenter == null
+          ? null
+          : _stageToTitleLocal(stageCenter);
       final since = t - reformStart;
-      if (since >= _titleReformDuration) {
+      if (local == null || since >= _titleReformDuration) {
         _titleReformStart = null;
-        return const _TitlePull(Offset.zero, 1.0);
+        _titleHoleStageCenter = null;
+        return const _TitleHole(null, 0);
       }
       final progress = (since / _titleReformDuration).clamp(0.0, 1.0);
-      return _TitlePull(Offset.zero, Curves.easeOut.transform(progress));
+      final eased = 1 - Curves.easeIn.transform(progress);
+      return _TitleHole(local, eased * _titleHoleMaxRadius);
     }
 
-    return const _TitlePull(Offset.zero, 1.0);
+    return const _TitleHole(null, 0);
   }
 
   // Picks a random spot for the galaxy sized off the screen (not a quarter
@@ -961,12 +1017,58 @@ class _GreetingPageState extends State<GreetingPage>
   bool _hidden = false;
   double? _hiddenSince;
 
-  // If a wormhole opens close enough to the galaxy, it drags the whole
-  // galaxy toward it instead of the pointer — reusing the exact same
-  // elastic swarm-follow physics as a drag — then swallows it (hidden, then
-  // reappearing elsewhere) exactly like after an explosion.
-  bool _galaxySucked = false;
-  _Wormhole? _galaxySuckedBy;
+  // If a wormhole opens close enough to part of the galaxy, only the
+  // particles actually within its radius get pulled in and swallowed —
+  // see `_computeGalaxyWormholePull` — rather than dragging the whole
+  // galaxy in as one rigid piece. With 900 particles, a captured handful
+  // vanishing (or popping back once released) is unnoticeable, so unlike
+  // the whole-galaxy explosion this needs no separate reform animation.
+  final Map<int, _Wormhole> _galaxyParticlesCaptured = {};
+
+  List<Offset> _computeGalaxyWormholePull(double t) {
+    final lag = _particleLag;
+    final maxR = _galaxyMaxR;
+    if (lag == null ||
+        maxR == null ||
+        _wormholes.isEmpty ||
+        _hidden ||
+        _exploding) {
+      return const [];
+    }
+    final effectiveR = maxR * _galaxyFormationProgress(t);
+    final rotation = t * 2 * pi / 45;
+    const influenceRadius = 220.0;
+    final pulls = List<Offset>.filled(_galaxyParticles.length, Offset.zero);
+    for (var i = 0; i < _galaxyParticles.length; i++) {
+      if (_galaxyParticlesCaptured.containsKey(i)) continue;
+      final p = _galaxyParticles[i];
+      final angle = p.angle + rotation;
+      final natural =
+          lag[i] +
+          Offset(
+            cos(angle) * p.radius * effectiveR,
+            sin(angle) * p.radius * effectiveR * _GalaxyPainter._tilt,
+          );
+      for (final w in _wormholes) {
+        final elapsed = t - w.startTime;
+        if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
+        final dist = (w.center - natural).distance;
+        if (dist > influenceRadius) continue;
+        final delay = (dist / influenceRadius) * 0.35;
+        final rawProgress =
+            (elapsed / (_Wormhole.suckDuration * _Wormhole.captureFraction))
+                .clamp(0.0, 1.0);
+        final adjusted = ((rawProgress - delay) / (1 - delay)).clamp(0.0, 1.0);
+        final pull = Curves.easeOutCubic.transform(adjusted);
+        pulls[i] = (w.center - natural) * pull;
+        if (pull > 0.95) {
+          _galaxyParticlesCaptured[i] = w;
+        }
+        break;
+      }
+    }
+    return pulls;
+  }
 
   // How long the galaxy takes to grow from nothing back to full size after
   // reappearing from an explosion; null once it's fully formed (or before
@@ -1134,28 +1236,6 @@ class _GreetingPageState extends State<GreetingPage>
       return;
     }
 
-    if (_galaxySucked) {
-      final w = _galaxySuckedBy;
-      if (w == null) {
-        _galaxySucked = false;
-      } else if (w.isDoneAt(t)) {
-        // Swallowed — vanish and reform elsewhere, exactly like after an
-        // explosion (reuses that same hide-then-reappear-then-grow-in
-        // pipeline).
-        _galaxySucked = false;
-        _galaxySuckedBy = null;
-        _hidden = true;
-        _hiddenSince = t;
-        _lastGalaxyT = t;
-        return;
-      } else {
-        // Chase the wormhole's center instead of a drag pointer — the
-        // existing per-particle lag/catch-up below does the rest, giving
-        // the same stretchy swarm-follow look as being dragged in.
-        _galaxyTarget = w.center;
-      }
-    }
-
     final since = _formingSince;
     if (since != null && t - since >= _formationDuration) {
       _formingSince = null;
@@ -1175,14 +1255,12 @@ class _GreetingPageState extends State<GreetingPage>
       lag[i] = Offset.lerp(lag[i], target, factor)!;
     }
 
-    if (_draggingGalaxy || _galaxySucked) {
+    if (_draggingGalaxy) {
       final haloFactor = 1 - exp(-dt / 0.35);
       _haloOpacity += (0.0 - _haloOpacity) * haloFactor;
 
       final dragStart = _dragStartTime;
-      if (_draggingGalaxy &&
-          dragStart != null &&
-          t - dragStart >= _dragExplodeThreshold) {
+      if (dragStart != null && t - dragStart >= _dragExplodeThreshold) {
         _triggerGalaxyExplosion(t);
       }
     } else {
@@ -1200,28 +1278,8 @@ class _GreetingPageState extends State<GreetingPage>
     }
   }
 
-  // Checked every frame from the build loop — starts dragging the galaxy
-  // into a wormhole that opened close enough to it, as long as it isn't
-  // already being manually dragged, exploding, hidden, or already sucked.
-  void _checkWormholeGalaxyCapture(double t) {
-    if (_draggingGalaxy || _hidden || _exploding || _galaxySucked) return;
-    final target = _galaxyTarget;
-    final maxR = _galaxyMaxR;
-    if (target == null || maxR == null) return;
-    for (final w in _wormholes) {
-      final elapsed = t - w.startTime;
-      if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
-      final pullRadius = maxR + 220;
-      if ((w.center - target).distance <= pullRadius) {
-        _galaxySucked = true;
-        _galaxySuckedBy = w;
-        return;
-      }
-    }
-  }
-
   void _onGalaxyPointerDown(PointerDownEvent event) {
-    if (_hidden || _exploding || _galaxySucked) return;
+    if (_hidden || _exploding) return;
     final target = _galaxyTarget;
     final maxR = _galaxyMaxR;
     if (target == null || maxR == null) return;
@@ -1383,12 +1441,13 @@ class _GreetingPageState extends State<GreetingPage>
               builder: (context, _) {
                 final t = DateTime.now().millisecondsSinceEpoch / 1000.0;
                 _ensureGalaxyPhysics(size);
-                _checkWormholeGalaxyCapture(t);
                 _updateGalaxyPhysics(t, size);
                 _updateWormholeTrigger(t);
-                final titlePull = _updateTitleWormhole(t);
+                final titleHole = _updateTitleWormhole(t);
+                final galaxyPull = _computeGalaxyWormholePull(t);
                 _fireworks.removeWhere((fw) => fw.isDoneAt(t));
                 _wormholes.removeWhere((w) => w.isDoneAt(t));
+                _galaxyParticlesCaptured.removeWhere((_, w) => w.isDoneAt(t));
                 return Transform.translate(
                   offset: _explosionShakeOffset(t),
                   child: Stack(
@@ -1425,6 +1484,12 @@ class _GreetingPageState extends State<GreetingPage>
                               blackHoleCenter: _galaxyTarget!,
                               haloOpacity: _haloOpacity,
                               formation: _galaxyFormationProgress(t),
+                              wormholePull: galaxyPull.isEmpty
+                                  ? null
+                                  : galaxyPull,
+                              wormholeCaptured: _galaxyParticlesCaptured.isEmpty
+                                  ? null
+                                  : _galaxyParticlesCaptured.keys.toSet(),
                             ),
                           ),
                         ),
@@ -1432,11 +1497,19 @@ class _GreetingPageState extends State<GreetingPage>
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 24),
                           child: Transform.translate(
-                            offset:
-                                Offset(_parallax.dx * -4, _parallax.dy * -4) +
-                                titlePull.offset,
-                            child: Opacity(
-                              opacity: titlePull.opacity,
+                            offset: Offset(
+                              _parallax.dx * -4,
+                              _parallax.dy * -4,
+                            ),
+                            child: ClipPath(
+                              clipper:
+                                  (titleHole.center != null &&
+                                      titleHole.radius > 0)
+                                  ? _EatenTextClipper(
+                                      holeCenter: titleHole.center!,
+                                      holeRadius: titleHole.radius,
+                                    )
+                                  : null,
                               child: FittedBox(
                                 fit: BoxFit.scaleDown,
                                 child: GestureDetector(
