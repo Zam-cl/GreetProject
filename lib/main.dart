@@ -646,6 +646,10 @@ class _Wormhole {
   static const double captureFraction = 0.45;
   static const double totalDuration =
       suckDuration + flashDuration + burstDuration;
+  // Shared reach used to decide whether a galaxy particle or title letter
+  // is close enough to be pulled in (the background starfield keeps its
+  // own separate, larger radius).
+  static const double partsInfluenceRadius = 150.0;
 
   // Matches the actual starfield's own colors (see `_stars` below) so the
   // motes read as real stars being pulled in, not a differently-colored
@@ -785,6 +789,31 @@ class _WormholePainter extends CustomPainter {
   bool shouldRepaint(covariant _WormholePainter oldDelegate) => true;
 }
 
+// Render-time result of `_GreetingPageState._computeLetterEffects`: how a
+// single title letter should be drawn this frame — spinning, shrinking, and
+// sliding toward the wormhole while it's being sucked in, rather than just
+// fading out in place.
+class _LetterEffect {
+  const _LetterEffect({
+    required this.opacity,
+    required this.rotation,
+    required this.scale,
+    required this.offset,
+  });
+
+  final double opacity;
+  final double rotation;
+  final double scale;
+  final Offset offset;
+
+  static const none = _LetterEffect(
+    opacity: 1,
+    rotation: 0,
+    scale: 1,
+    offset: Offset.zero,
+  );
+}
+
 class GreetingPage extends StatefulWidget {
   const GreetingPage({super.key});
 
@@ -794,7 +823,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 41;
+  static const int editCount = 42;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -855,39 +884,56 @@ class _GreetingPageState extends State<GreetingPage>
   // the wormhole — not a radius scaled to the whole title's size.
   final Map<int, _Wormhole> _lettersEatenBy = {};
   final Map<int, double> _lettersReleaseAt = {};
-  static const double _letterInfluenceRadius = 220.0;
   static const double _letterReleaseFadeDuration = 0.45;
+  static const double _letterMaxRotation = pi * 3; // one and a half spins
+  static const double _letterMinScale = 0.15;
 
-  List<double> _computeLetterOpacities(double t) {
+  List<_LetterEffect> _computeLetterEffects(double t) {
     _lettersEatenBy.removeWhere((index, w) {
       if (!w.isDoneAt(t)) return false;
       _lettersReleaseAt[index] = t;
       return true;
     });
 
-    return List<double>.generate(_titleText.length, (i) {
-      if (_titleText[i] == ' ') return 1.0;
+    return List<_LetterEffect>.generate(_titleText.length, (i) {
+      if (_titleText[i] == ' ') return _LetterEffect.none;
 
-      if (_lettersEatenBy.containsKey(i)) return 0.0;
+      if (_lettersEatenBy.containsKey(i)) {
+        return const _LetterEffect(
+          opacity: 0,
+          rotation: _letterMaxRotation,
+          scale: _letterMinScale,
+          offset: Offset.zero,
+        );
+      }
 
       final releaseAt = _lettersReleaseAt[i];
       if (releaseAt != null) {
         final since = t - releaseAt;
         if (since >= _letterReleaseFadeDuration) {
           _lettersReleaseAt.remove(i);
-          return 1.0;
+          return _LetterEffect.none;
         }
-        return (since / _letterReleaseFadeDuration).clamp(0.0, 1.0);
+        // Reappears already back at rest — it was fully invisible a moment
+        // ago, so resetting position/spin now is never seen; only the fade
+        // itself is visible.
+        final revealed = (since / _letterReleaseFadeDuration).clamp(0.0, 1.0);
+        return _LetterEffect(
+          opacity: revealed,
+          rotation: 0,
+          scale: 1,
+          offset: Offset.zero,
+        );
       }
 
       final rect = _rectOf(_letterKeys[i]);
-      if (rect == null) return 1.0;
+      if (rect == null) return _LetterEffect.none;
       for (final w in _wormholes) {
         final elapsed = t - w.startTime;
         if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
         final dist = (w.center - rect.center).distance;
-        if (dist > _letterInfluenceRadius) continue;
-        final delay = (dist / _letterInfluenceRadius) * 0.35;
+        if (dist > _Wormhole.partsInfluenceRadius) continue;
+        final delay = (dist / _Wormhole.partsInfluenceRadius) * 0.35;
         final rawProgress =
             (elapsed / (_Wormhole.suckDuration * _Wormhole.captureFraction))
                 .clamp(0.0, 1.0);
@@ -895,11 +941,21 @@ class _GreetingPageState extends State<GreetingPage>
         final pull = Curves.easeOutCubic.transform(adjusted);
         if (pull > 0.95) {
           _lettersEatenBy[i] = w;
-          return 0.0;
+          return const _LetterEffect(
+            opacity: 0,
+            rotation: _letterMaxRotation,
+            scale: _letterMinScale,
+            offset: Offset.zero,
+          );
         }
-        return (1 - pull).clamp(0.0, 1.0);
+        return _LetterEffect(
+          opacity: (1 - pull).clamp(0.0, 1.0),
+          rotation: pull * _letterMaxRotation,
+          scale: (1 - pull * (1 - _letterMinScale)).clamp(_letterMinScale, 1.0),
+          offset: (w.center - rect.center) * pull,
+        );
       }
-      return 1.0;
+      return _LetterEffect.none;
     });
   }
 
@@ -989,7 +1045,7 @@ class _GreetingPageState extends State<GreetingPage>
     }
     final effectiveR = maxR * _galaxyFormationProgress(t);
     final rotation = t * 2 * pi / 45;
-    const influenceRadius = 220.0;
+    const influenceRadius = _Wormhole.partsInfluenceRadius;
     final pulls = List<Offset>.filled(_galaxyParticles.length, Offset.zero);
     for (var i = 0; i < _galaxyParticles.length; i++) {
       if (_galaxyParticlesCaptured.containsKey(i)) continue;
@@ -1403,7 +1459,7 @@ class _GreetingPageState extends State<GreetingPage>
                 _ensureGalaxyPhysics(size);
                 _updateGalaxyPhysics(t, size);
                 _updateWormholeTrigger(t);
-                final letterOpacities = _computeLetterOpacities(t);
+                final letterEffects = _computeLetterEffects(t);
                 final galaxyPull = _computeGalaxyWormholePull(t);
                 _fireworks.removeWhere((fw) => fw.isDoneAt(t));
                 _wormholes.removeWhere((w) => w.isDoneAt(t));
@@ -1484,28 +1540,49 @@ class _GreetingPageState extends State<GreetingPage>
                                         i < _titleText.length;
                                         i++
                                       )
-                                        Opacity(
+                                        KeyedSubtree(
                                           key: _letterKeys[i],
-                                          opacity: letterOpacities[i],
-                                          child: Text(
-                                            _titleText[i],
-                                            style: GoogleFonts.orbitron(
-                                              fontSize: 64,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                              letterSpacing: 2,
-                                              shadows: [
-                                                Shadow(
-                                                  color: const Color(0xFFB388FF)
-                                                      .withValues(alpha: 0.75),
-                                                  blurRadius: 6,
+                                          child: Transform.translate(
+                                            offset: letterEffects[i].offset,
+                                            child: Transform.rotate(
+                                              angle: letterEffects[i].rotation,
+                                              child: Transform.scale(
+                                                scale: letterEffects[i].scale,
+                                                child: Opacity(
+                                                  opacity:
+                                                      letterEffects[i].opacity,
+                                                  child: Text(
+                                                    _titleText[i],
+                                                    style: GoogleFonts.orbitron(
+                                                      fontSize: 64,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: Colors.white,
+                                                      letterSpacing: 2,
+                                                      shadows: [
+                                                        Shadow(
+                                                          color:
+                                                              const Color(
+                                                                0xFFB388FF,
+                                                              ).withValues(
+                                                                alpha: 0.75,
+                                                              ),
+                                                          blurRadius: 6,
+                                                        ),
+                                                        Shadow(
+                                                          color:
+                                                              const Color(
+                                                                0xFF5CE1FF,
+                                                              ).withValues(
+                                                                alpha: 0.45,
+                                                              ),
+                                                          blurRadius: 14,
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
                                                 ),
-                                                Shadow(
-                                                  color: const Color(0xFF5CE1FF)
-                                                      .withValues(alpha: 0.45),
-                                                  blurRadius: 14,
-                                                ),
-                                              ],
+                                              ),
                                             ),
                                           ),
                                         ),
