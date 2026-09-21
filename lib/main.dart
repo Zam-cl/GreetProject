@@ -687,28 +687,6 @@ class _WormholeMote {
   );
 }
 
-// Shared by every "does this wormhole pull this in" check (background
-// stars, galaxy particles, title letters): 0..1 progress, easing from 0 up
-// to a full pull well before `_Wormhole.suckDuration` ends (so it reads as
-// a fast grab followed by a lingering hold — see `_Wormhole.captureFraction`).
-// `dist` only delays *when* the pull starts ramping up, never how far it
-// ultimately reaches, so anything within `influenceRadius` always ends up
-// fully captured rather than stalling partway.
-double _wormholePullFactor(
-  double elapsed,
-  double dist,
-  double influenceRadius,
-) {
-  final delay = (dist / influenceRadius) * 0.35;
-  final rawProgress =
-      (elapsed / (_Wormhole.suckDuration * _Wormhole.captureFraction)).clamp(
-        0.0,
-        1.0,
-      );
-  final adjusted = ((rawProgress - delay) / (1 - delay)).clamp(0.0, 1.0);
-  return Curves.easeOutCubic.transform(adjusted);
-}
-
 // A secret one-shot easter egg: hold a finger/click on empty sky (away from
 // the galaxy and the title) for a moment and a wormhole opens — a small
 // accretion vortex spirals nearby light in toward the press point, then
@@ -730,6 +708,15 @@ class _Wormhole {
   // caught — no stall beforehand, regardless of how far in it was or how
   // long the wormhole had already been open.
   final Map<int, ({Offset anchor, double capturedAt})> starCaptures = {};
+
+  // Same idea as `starCaptures` but for galaxy particles and title
+  // letters — they don't need a frozen position anchor (their natural
+  // position never randomly teleports the way a star's twinkle cycle
+  // does), only the per-entity, per-wormhole capture *time*, so their
+  // pull also ramps from zero the instant each one is individually
+  // caught instead of using the shared distance-based delay.
+  final Map<int, double> particleCapturedAt = {};
+  final Map<int, double> letterCapturedAt = {};
 
   // Called whenever this wormhole actually swallows a piece of the galaxy
   // or the title — recolors a sizeable batch of its existing motes to that
@@ -932,7 +919,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 60;
+  static const int editCount = 61;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -1085,16 +1072,23 @@ class _GreetingPageState extends State<GreetingPage>
       final rect = _rectOf(_letterKeys[i]);
       if (rect == null) return _LetterEffect.none;
       for (final w in _wormholes) {
-        final elapsed = t - w.startTime;
-        if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
+        final wormholeElapsed = t - w.startTime;
+        if (wormholeElapsed < 0 || wormholeElapsed > _Wormhole.suckDuration) {
+          continue;
+        }
         final offset = rect.center - w.center;
         final dist = offset.distance;
         if (dist > _Wormhole.partsInfluenceRadius) continue;
-        final pull = _wormholePullFactor(
-          elapsed,
-          dist,
-          _Wormhole.partsInfluenceRadius,
-        );
+        var capturedAt = w.letterCapturedAt[i];
+        if (capturedAt == null) {
+          capturedAt = t;
+          w.letterCapturedAt[i] = capturedAt;
+        }
+        final localElapsed = t - capturedAt;
+        final rawProgress = (localElapsed /
+                (_Wormhole.suckDuration * _Wormhole.captureFraction))
+            .clamp(0.0, 1.0);
+        final pull = Curves.easeOutCubic.transform(rawProgress);
         if (pull > 0.95) {
           _lettersEatenBy[i] = w;
           w.addCapturedColor(
@@ -1232,12 +1226,23 @@ class _GreetingPageState extends State<GreetingPage>
             sin(angle) * p.radius * effectiveR * _GalaxyPainter._tilt,
           );
       for (final w in _wormholes) {
-        final elapsed = t - w.startTime;
-        if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
+        final wormholeElapsed = t - w.startTime;
+        if (wormholeElapsed < 0 || wormholeElapsed > _Wormhole.suckDuration) {
+          continue;
+        }
         final offset = natural - w.center;
         final dist = offset.distance;
         if (dist > influenceRadius) continue;
-        final pull = _wormholePullFactor(elapsed, dist, influenceRadius);
+        var capturedAt = w.particleCapturedAt[i];
+        if (capturedAt == null) {
+          capturedAt = t;
+          w.particleCapturedAt[i] = capturedAt;
+        }
+        final localElapsed = t - capturedAt;
+        final rawProgress = (localElapsed /
+                (_Wormhole.suckDuration * _Wormhole.captureFraction))
+            .clamp(0.0, 1.0);
+        final pull = Curves.easeOutCubic.transform(rawProgress);
         // Spirals in around the wormhole (same direction/rate as the
         // background stars) instead of flying straight toward its center.
         const spinRate = 2.2;
