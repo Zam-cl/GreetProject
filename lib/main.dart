@@ -945,7 +945,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 62;
+  static const int editCount = 63;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -1053,7 +1053,31 @@ class _GreetingPageState extends State<GreetingPage>
   static const double _letterMaxRotation = pi * 3; // one and a half spins
   static const double _letterMinScale = 0.15;
 
+  // Each letter's own gradient is sliced from these "home" (undisplaced)
+  // positions rather than the title's live bounds, so a letter being
+  // pulled toward a wormhole keeps showing its correct slice of the
+  // purple-to-blue sweep instead of drifting outside a gradient that was
+  // only ever sized/positioned for the text sitting at rest — see the
+  // per-letter ShaderMask below. Only refreshed while nothing is actively
+  // being pulled, since mid-pull the letters' own measured rects reflect
+  // their displaced position, not their true resting one.
+  Rect? _titleHomeRect;
+  final Map<int, Rect> _letterHomeRects = {};
+
+  void _refreshTitleHomeRectsIfIdle() {
+    if (_wormholes.isNotEmpty) return;
+    final titleRect = _currentTitleRect();
+    if (titleRect == null) return;
+    _titleHomeRect = titleRect;
+    for (var i = 0; i < _titleText.length; i++) {
+      if (_titleText[i] == ' ') continue;
+      final rect = _rectOf(_letterKeys[i]);
+      if (rect != null) _letterHomeRects[i] = rect;
+    }
+  }
+
   List<_LetterEffect> _computeLetterEffects(double t) {
+    _refreshTitleHomeRectsIfIdle();
     _lettersEatenBy.removeWhere((index, w) {
       if (!w.isDoneAt(t)) return false;
       _lettersReleaseAt[index] = t;
@@ -1971,34 +1995,79 @@ class _GreetingPageState extends State<GreetingPage>
                                       key: _titleKey,
                                       behavior: HitTestBehavior.opaque,
                                       onTap: _spawnFirework,
-                                      child: ShaderMask(
-                                        shaderCallback: (bounds) =>
-                                            const LinearGradient(
-                                              colors: _titleGradientColors,
-                                            ).createShader(bounds),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            for (
-                                              var i = 0;
-                                              i < _titleText.length;
-                                              i++
-                                            )
-                                              KeyedSubtree(
-                                                key: _letterKeys[i],
-                                                child: Transform.translate(
-                                                  offset:
-                                                      letterEffects[i].offset,
-                                                  child: Transform.rotate(
-                                                    angle: letterEffects[i]
-                                                        .rotation,
-                                                    child: Transform.scale(
-                                                      scale: letterEffects[i]
-                                                          .scale,
-                                                      child: Opacity(
-                                                        opacity:
-                                                            letterEffects[i]
-                                                                .opacity,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          for (
+                                            var i = 0;
+                                            i < _titleText.length;
+                                            i++
+                                          )
+                                            KeyedSubtree(
+                                              key: _letterKeys[i],
+                                              child: Transform.translate(
+                                                offset:
+                                                    letterEffects[i].offset,
+                                                child: Transform.rotate(
+                                                  angle: letterEffects[i]
+                                                      .rotation,
+                                                  child: Transform.scale(
+                                                    scale:
+                                                        letterEffects[i].scale,
+                                                    child: Opacity(
+                                                      opacity: letterEffects[i]
+                                                          .opacity,
+                                                      // Each letter carries
+                                                      // its own slice of the
+                                                      // gradient (sliced from
+                                                      // its resting position,
+                                                      // see
+                                                      // `_refreshTitleHomeRectsIfIdle`)
+                                                      // instead of one shared
+                                                      // gradient rectangle
+                                                      // sized for the whole
+                                                      // title at rest — that
+                                                      // made a letter turn
+                                                      // plain white the
+                                                      // moment a wormhole
+                                                      // pulled it outside
+                                                      // that fixed rectangle.
+                                                      child: ShaderMask(
+                                                        shaderCallback: (bounds) {
+                                                          final titleHome =
+                                                              _titleHomeRect;
+                                                          final letterHome =
+                                                              _letterHomeRects[i];
+                                                          if (titleHome ==
+                                                                  null ||
+                                                              letterHome ==
+                                                                  null) {
+                                                            return const LinearGradient(
+                                                              colors:
+                                                                  _titleGradientColors,
+                                                            ).createShader(
+                                                              bounds,
+                                                            );
+                                                          }
+                                                          final offsetWithinTitle =
+                                                              letterHome.left -
+                                                              titleHome.left;
+                                                          final shaderRect =
+                                                              Rect.fromLTWH(
+                                                                -offsetWithinTitle,
+                                                                0,
+                                                                titleHome
+                                                                    .width,
+                                                                letterHome
+                                                                    .height,
+                                                              );
+                                                          return const LinearGradient(
+                                                            colors:
+                                                                _titleGradientColors,
+                                                          ).createShader(
+                                                            shaderRect,
+                                                          );
+                                                        },
                                                         child: Text(
                                                           _titleText[i],
                                                           style:
@@ -2009,8 +2078,8 @@ class _GreetingPageState extends State<GreetingPage>
                                                   ),
                                                 ),
                                               ),
-                                          ],
-                                        ),
+                                            ),
+                                        ],
                                       ),
                                     ),
                                   ),
