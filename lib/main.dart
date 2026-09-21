@@ -717,6 +717,17 @@ class _Wormhole {
   // caught instead of using the shared distance-based delay.
   final Map<int, double> particleCapturedAt = {};
   final Map<int, double> letterCapturedAt = {};
+  double? blackHoleCapturedAt;
+
+  // Set once the hold gesture is released — before that, the suck-in phase
+  // continues indefinitely (as long as it's held) instead of a fixed
+  // duration; flash + burst are timed from this moment instead of a fixed
+  // point in the wormhole's own lifetime.
+  double? releasedAt;
+
+  // Whether this wormhole swallowed the galaxy's own black hole before
+  // being released — makes its eventual burst dramatically bigger.
+  bool ateBlackHole = false;
 
   // Called whenever this wormhole actually swallows a piece of the galaxy
   // or the title — recolors a sizeable batch of its existing motes to that
@@ -735,15 +746,16 @@ class _Wormhole {
     }
   }
 
-  static const double suckDuration = 3.0;
+  // How long the accretion disc takes to reach its full visual size while
+  // being held — holding longer than this just keeps it at max size,
+  // it's not a phase cutoff anymore (see `releasedAt`).
+  static const double discGrowDuration = 3.0;
   static const double flashDuration = 0.25;
   static const double burstDuration = 1.3;
-  // Everything gets pulled all the way in by this fraction of `suckDuration`
-  // — well before the phase actually ends — so the pull itself reads as
-  // fast, with the vortex just lingering, already full, until it detonates.
-  static const double captureFraction = 0.45;
-  static const double totalDuration =
-      suckDuration + flashDuration + burstDuration;
+  // How long a freshly-caught star/particle/letter/black-hole takes to
+  // reach full pull once it's individually captured — independent of how
+  // long the wormhole as a whole has been open or held.
+  static const double captureRampDuration = 1.35;
   // Shared reach used to decide whether a galaxy particle or title letter
   // is close enough to be pulled in (the background starfield keeps its
   // own separate, larger radius).
@@ -774,7 +786,11 @@ class _Wormhole {
     });
   }
 
-  bool isDoneAt(double t) => t - startTime > totalDuration;
+  bool isDoneAt(double t) {
+    final released = releasedAt;
+    if (released == null) return false; // still held open, never times out on its own
+    return t - released > flashDuration + burstDuration;
+  }
 }
 
 class _WormholePainter extends CustomPainter {
@@ -787,24 +803,29 @@ class _WormholePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     for (final w in wormholes) {
       final elapsed = t - w.startTime;
-      if (elapsed < 0 || elapsed > _Wormhole.totalDuration) continue;
+      if (elapsed < 0) continue;
 
-      if (elapsed < _Wormhole.suckDuration) {
+      final released = w.releasedAt;
+      if (released == null) {
+        // Still being held — suck-in continues for as long as the press
+        // does, instead of a fixed duration.
         _paintSuckIn(canvas, w, elapsed);
-      } else if (elapsed < _Wormhole.suckDuration + _Wormhole.flashDuration) {
-        _paintFlash(canvas, w, elapsed - _Wormhole.suckDuration);
+        continue;
+      }
+      final sinceRelease = t - released;
+      if (sinceRelease > _Wormhole.flashDuration + _Wormhole.burstDuration) {
+        continue;
+      }
+      if (sinceRelease < _Wormhole.flashDuration) {
+        _paintFlash(canvas, w, sinceRelease);
       } else {
-        _paintBurst(
-          canvas,
-          w,
-          elapsed - _Wormhole.suckDuration - _Wormhole.flashDuration,
-        );
+        _paintBurst(canvas, w, sinceRelease - _Wormhole.flashDuration);
       }
     }
   }
 
   void _paintSuckIn(Canvas canvas, _Wormhole w, double elapsed) {
-    final progress = (elapsed / _Wormhole.suckDuration).clamp(0.0, 1.0);
+    final progress = (elapsed / _Wormhole.discGrowDuration).clamp(0.0, 1.0);
 
     // A small dark accretion disc grows at the center as it swallows
     // everything spiraling into it.
@@ -835,7 +856,8 @@ class _WormholePainter extends CustomPainter {
 
   void _paintFlash(Canvas canvas, _Wormhole w, double elapsed) {
     final flashT = (elapsed / _Wormhole.flashDuration).clamp(0.0, 1.0);
-    final r = 10 + 90 * flashT;
+    final scale = w.ateBlackHole ? 2.6 : 1.0;
+    final r = (10 + 90 * flashT) * scale;
     canvas.drawCircle(
       w.center,
       r,
@@ -857,16 +879,20 @@ class _WormholePainter extends CustomPainter {
   void _paintBurst(Canvas canvas, _Wormhole w, double elapsed) {
     final progress = (elapsed / _Wormhole.burstDuration).clamp(0.0, 1.0);
     final fade = (1 - progress) * (1 - progress);
+    // Swallowing the galaxy's own black hole makes the eventual burst read
+    // as several times bigger — faster, longer trails, bigger sparks —
+    // instead of adding a separate effect on top.
+    final scale = w.ateBlackHole ? 3.0 : 1.0;
     for (final m in w.motes) {
-      final dist = m.burstSpeed * elapsed;
+      final dist = m.burstSpeed * elapsed * scale;
       final dir = Offset(cos(m.burstAngle), sin(m.burstAngle));
       final head = w.center + dir * dist;
-      final tail = head - dir * (18 + 40 * progress);
+      final tail = head - dir * (18 + 40 * progress) * scale;
       canvas.drawLine(
         tail,
         head,
         Paint()
-          ..strokeWidth = 1.6
+          ..strokeWidth = 1.6 * (w.ateBlackHole ? 1.7 : 1.0)
           ..strokeCap = StrokeCap.round
           ..shader = ui.Gradient.linear(tail, head, [
             m.color.withValues(alpha: 0),
@@ -875,7 +901,7 @@ class _WormholePainter extends CustomPainter {
       );
       canvas.drawCircle(
         head,
-        m.size * 0.8,
+        m.size * 0.8 * (w.ateBlackHole ? 2.0 : 1.0),
         Paint()..color = m.color.withValues(alpha: fade),
       );
     }
@@ -919,7 +945,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 61;
+  static const int editCount = 62;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -1073,20 +1099,22 @@ class _GreetingPageState extends State<GreetingPage>
       if (rect == null) return _LetterEffect.none;
       for (final w in _wormholes) {
         final wormholeElapsed = t - w.startTime;
-        if (wormholeElapsed < 0 || wormholeElapsed > _Wormhole.suckDuration) {
-          continue;
-        }
-        final offset = rect.center - w.center;
-        final dist = offset.distance;
-        if (dist > _Wormhole.partsInfluenceRadius) continue;
+        if (wormholeElapsed < 0) continue;
         var capturedAt = w.letterCapturedAt[i];
         if (capturedAt == null) {
+          // Only start a fresh capture while still being held — once
+          // released, nothing new gets grabbed, though anything already
+          // mid-capture keeps ramping to completion on its own clock.
+          if (w.releasedAt != null) continue;
+          final offset = rect.center - w.center;
+          if (offset.distance > _Wormhole.partsInfluenceRadius) continue;
           capturedAt = t;
           w.letterCapturedAt[i] = capturedAt;
         }
+        final offset = rect.center - w.center;
+        final dist = offset.distance;
         final localElapsed = t - capturedAt;
-        final rawProgress = (localElapsed /
-                (_Wormhole.suckDuration * _Wormhole.captureFraction))
+        final rawProgress = (localElapsed / _Wormhole.captureRampDuration)
             .clamp(0.0, 1.0);
         final pull = Curves.easeOutCubic.transform(rawProgress);
         if (pull > 0.95) {
@@ -1227,20 +1255,17 @@ class _GreetingPageState extends State<GreetingPage>
           );
       for (final w in _wormholes) {
         final wormholeElapsed = t - w.startTime;
-        if (wormholeElapsed < 0 || wormholeElapsed > _Wormhole.suckDuration) {
-          continue;
-        }
+        if (wormholeElapsed < 0) continue;
         final offset = natural - w.center;
         final dist = offset.distance;
-        if (dist > influenceRadius) continue;
         var capturedAt = w.particleCapturedAt[i];
         if (capturedAt == null) {
+          if (w.releasedAt != null || dist > influenceRadius) continue;
           capturedAt = t;
           w.particleCapturedAt[i] = capturedAt;
         }
         final localElapsed = t - capturedAt;
-        final rawProgress = (localElapsed /
-                (_Wormhole.suckDuration * _Wormhole.captureFraction))
+        final rawProgress = (localElapsed / _Wormhole.captureRampDuration)
             .clamp(0.0, 1.0);
         final pull = Curves.easeOutCubic.transform(rawProgress);
         // Spirals in around the wormhole (same direction/rate as the
@@ -1261,6 +1286,50 @@ class _GreetingPageState extends State<GreetingPage>
       }
     }
     return pulls;
+  }
+
+  // Lets a wormhole swallow the galaxy's own black hole too, the same way
+  // it swallows individual particles/letters/stars — if it manages to pull
+  // the black hole all the way in before being released, the galaxy
+  // vanishes (like after a supernova, reappearing elsewhere shortly after)
+  // and that wormhole's own eventual burst becomes dramatically bigger
+  // (see `w.ateBlackHole` in `_WormholePainter._paintBurst`).
+  Offset _computeBlackHoleWormholePull(double t) {
+    final center = _blackHoleLag;
+    if (center == null || _hidden || _exploding) return Offset.zero;
+    const influenceRadius = _Wormhole.partsInfluenceRadius;
+    for (final w in _wormholes) {
+      if (w.ateBlackHole) continue;
+      final wormholeElapsed = t - w.startTime;
+      if (wormholeElapsed < 0) continue;
+      final offset = center - w.center;
+      final dist = offset.distance;
+      var capturedAt = w.blackHoleCapturedAt;
+      if (capturedAt == null) {
+        if (w.releasedAt != null || dist > influenceRadius) continue;
+        capturedAt = t;
+        w.blackHoleCapturedAt = capturedAt;
+      }
+      final localElapsed = t - capturedAt;
+      final rawProgress = (localElapsed / _Wormhole.captureRampDuration)
+          .clamp(0.0, 1.0);
+      final pull = Curves.easeOutCubic.transform(rawProgress);
+      const spinRate = 2.2;
+      final baseAngle = dist == 0 ? 0.0 : offset.direction;
+      final spiralAngle = baseAngle + spinRate * pull;
+      final radius = dist * (1 - pull);
+      final spiralPos =
+          w.center +
+          Offset(cos(spiralAngle) * radius, sin(spiralAngle) * radius * 0.6);
+      if (pull > 0.95) {
+        w.ateBlackHole = true;
+        _hidden = true;
+        _hiddenSince = t;
+        return Offset.zero;
+      }
+      return spiralPos - center;
+    }
+    return Offset.zero;
   }
 
   // How long the galaxy takes to grow from nothing back to full size after
@@ -1517,13 +1586,19 @@ class _GreetingPageState extends State<GreetingPage>
   }
 
   // Secret wormhole easter egg: hold still on empty sky (not on the galaxy
-  // or the title) for `_wormholeHoldThreshold` seconds to open one.
+  // or the title) for `_wormholeHoldThreshold` seconds to open one. Keyed
+  // by `event.pointer` (not single shared fields) so multiple fingers can
+  // each hold their own candidate/open wormhole at once — releasing one
+  // finger only closes *that* wormhole instead of whichever one happened
+  // to be tracked last.
   final List<_Wormhole> _wormholes = [];
-  Offset? _wormholePressStart;
-  double? _wormholePressStartTime;
-  bool _wormholeCandidate = false;
+  final Map<int, Offset> _wormholePressStart = {};
+  final Map<int, double> _wormholePressStartTime = {};
   static const double _wormholeHoldThreshold = 0.6;
   static const double _wormholeMoveTolerance = 24;
+  // The wormhole opened by each currently-held press, if any — released
+  // (moved to flash+burst) once that specific press lets go.
+  final Map<int, _Wormhole> _activeWormhole = {};
 
   void _onBackgroundPointerDown(PointerDownEvent event) {
     if (_draggingGalaxy || _hidden || _exploding) return;
@@ -1540,40 +1615,48 @@ class _GreetingPageState extends State<GreetingPage>
             maxR * _galaxyGrabRadiusFactor) {
       return;
     }
-    _wormholePressStart = event.localPosition;
-    _wormholePressStartTime = DateTime.now().millisecondsSinceEpoch / 1000.0;
-    _wormholeCandidate = true;
+    _wormholePressStart[event.pointer] = event.localPosition;
+    _wormholePressStartTime[event.pointer] =
+        DateTime.now().millisecondsSinceEpoch / 1000.0;
   }
 
   void _onBackgroundPointerMove(PointerEvent event) {
-    if (!_wormholeCandidate) return;
-    final start = _wormholePressStart;
+    final start = _wormholePressStart[event.pointer];
     if (start == null) return;
     if ((event.localPosition - start).distance > _wormholeMoveTolerance) {
-      _wormholeCandidate = false;
-      _wormholePressStart = null;
-      _wormholePressStartTime = null;
+      _wormholePressStart.remove(event.pointer);
+      _wormholePressStartTime.remove(event.pointer);
     }
   }
 
   void _onBackgroundPointerUp(PointerEvent event) {
-    _wormholeCandidate = false;
-    _wormholePressStart = null;
-    _wormholePressStartTime = null;
+    _wormholePressStart.remove(event.pointer);
+    _wormholePressStartTime.remove(event.pointer);
+    // Releasing closes whichever wormhole this specific press opened (if
+    // any) — it keeps sucking things in for as long as it's held, rather
+    // than for a fixed duration, and only starts its flash+burst once let
+    // go.
+    final active = _activeWormhole.remove(event.pointer);
+    if (active != null && active.releasedAt == null) {
+      active.releasedAt = DateTime.now().millisecondsSinceEpoch / 1000.0;
+    }
   }
 
   // Checked every frame from the build loop, alongside the galaxy physics —
-  // opens the wormhole once a candidate press has been held long enough.
+  // opens a wormhole for each candidate press held long enough.
   void _updateWormholeTrigger(double t) {
-    if (!_wormholeCandidate) return;
-    final start = _wormholePressStartTime;
-    final pos = _wormholePressStart;
-    if (start == null || pos == null) return;
-    if (t - start >= _wormholeHoldThreshold) {
-      _wormholeCandidate = false;
-      _wormholePressStart = null;
-      _wormholePressStartTime = null;
-      _wormholes.add(_Wormhole(center: pos, startTime: t));
+    if (_wormholePressStartTime.isEmpty) return;
+    final ready = _wormholePressStartTime.entries
+        .where((e) => t - e.value >= _wormholeHoldThreshold)
+        .map((e) => e.key)
+        .toList();
+    for (final pointer in ready) {
+      final pos = _wormholePressStart.remove(pointer);
+      _wormholePressStartTime.remove(pointer);
+      if (pos == null) continue;
+      final w = _Wormhole(center: pos, startTime: t);
+      _wormholes.add(w);
+      _activeWormhole[pointer] = w;
       _bumpWormholeCount();
     }
   }
@@ -1804,6 +1887,7 @@ class _GreetingPageState extends State<GreetingPage>
                     _updateWormholeTrigger(t);
                     final letterEffects = _computeLetterEffects(t);
                     final galaxyPull = _computeGalaxyWormholePull(t);
+                    final blackHolePull = _computeBlackHoleWormholePull(t);
                     _fireworks.removeWhere((fw) => fw.isDoneAt(t));
                     _wormholes.removeWhere((w) => w.isDoneAt(t));
                     _galaxyParticlesCaptured.removeWhere(
@@ -1857,7 +1941,8 @@ class _GreetingPageState extends State<GreetingPage>
                                     particleCenters: _particleLag!,
                                     rotation: t * 2 * pi / 45,
                                     maxR: _galaxyMaxR!,
-                                    blackHoleCenter: _blackHoleLag!,
+                                    blackHoleCenter:
+                                        _blackHoleLag! + blackHolePull,
                                     haloOpacity: _haloOpacity,
                                     formation: _galaxyFormationProgress(t),
                                     wormholePull: galaxyPull.isEmpty
@@ -2047,11 +2132,10 @@ class _GreetingPageState extends State<GreetingPage>
     const influenceRadius = 260.0;
     for (final w in _wormholes) {
       final wormholeElapsed = t - w.startTime;
-      if (wormholeElapsed < 0 || wormholeElapsed > _Wormhole.suckDuration) {
-        continue;
-      }
+      if (wormholeElapsed < 0) continue;
       var capture = w.starCaptures[star.seed];
       if (capture == null) {
+        if (w.releasedAt != null) continue;
         final livePos = Offset(
           star.positionAt(t).dx * size.width,
           star.positionAt(t).dy * size.height,
@@ -2063,8 +2147,7 @@ class _GreetingPageState extends State<GreetingPage>
       final offset = capture.anchor - w.center;
       final dist = offset.distance;
       final localElapsed = t - capture.capturedAt;
-      final rawProgress = (localElapsed /
-              (_Wormhole.suckDuration * _Wormhole.captureFraction))
+      final rawProgress = (localElapsed / _Wormhole.captureRampDuration)
           .clamp(0.0, 1.0);
       final pull = Curves.easeOutCubic.transform(rawProgress);
       const spinRate = 2.2; // same direction/rate for every star
