@@ -922,7 +922,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 58;
+  static const int editCount = 59;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -1436,12 +1436,12 @@ class _GreetingPageState extends State<GreetingPage>
       lag[i] = Offset.lerp(lag[i], target, factor)!;
     }
 
-    // The black hole itself eases toward the target with its own short
-    // time constant — faster than every star (the innermost particles'
-    // tau bottoms out at 0.12), so it's always the first thing to move,
-    // leading the swarm like the actual mass everything else follows,
-    // while still not being a perfectly rigid 1:1 pin to the pointer.
-    const blackHoleTau = 0.12;
+    // The black hole eases toward the target at roughly the same rate as
+    // the innermost particles (radius bottoms out around 0.075, giving
+    // tau = 0.12 + 0.075*0.9 ≈ 0.19 — not 0.12, which was measuring from
+    // a radius of 0 that no particle actually has) rather than visibly
+    // leading them.
+    const blackHoleTau = 0.19;
     final blackHoleFactor = 1 - exp(-dt / blackHoleTau);
     _blackHoleLag = Offset.lerp(_blackHoleLag ?? target, target, blackHoleFactor);
 
@@ -2013,6 +2013,16 @@ class _GreetingPageState extends State<GreetingPage>
   // into view at the exact place the wormhole grabbed it from.
   final Set<int> _wormholeCaptured = {};
 
+  // The screen position each currently-tracked star had the instant it
+  // first came within a wormhole's reach — used as the spiral's geometric
+  // reference instead of the star's live, continuously-drifting position.
+  // Without this, a star's own natural twinkle cycle can teleport it to a
+  // fresh random spot (see `_Star.positionAt`) mid-capture, which jolted
+  // the spiral's angle/radius since they were recomputed from that live
+  // position every frame — looking like the star "froze" and jumped right
+  // before spiraling in properly.
+  final Map<int, Offset> _wormholeAnchor = {};
+
   // Pulls a screen position toward any wormhole currently in its suck-in
   // phase — this is what actually drags the real stars in, rather than just
   // showing a separate effect near them. Every star inside the influence
@@ -2031,16 +2041,23 @@ class _GreetingPageState extends State<GreetingPage>
   Offset? _wormholePulledPosition(_Star star, double t, Size size) {
     Offset? result;
     const influenceRadius = 260.0;
+    var stillTracked = false;
     for (final w in _wormholes) {
       final elapsed = t - w.startTime;
       if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
-      final basePos = Offset(
-        star.positionAt(t).dx * size.width,
-        star.positionAt(t).dy * size.height,
-      );
-      final offset = basePos - w.center;
+      var anchor = _wormholeAnchor[star.seed];
+      if (anchor == null) {
+        final livePos = Offset(
+          star.positionAt(t).dx * size.width,
+          star.positionAt(t).dy * size.height,
+        );
+        if ((livePos - w.center).distance > influenceRadius) continue;
+        anchor = livePos;
+        _wormholeAnchor[star.seed] = anchor;
+      }
+      stillTracked = true;
+      final offset = anchor - w.center;
       final dist = offset.distance;
-      if (dist > influenceRadius) continue;
       final pull = _wormholePullFactor(elapsed, dist, influenceRadius);
       const spinRate = 2.2; // same direction/rate for every star
       final baseAngle = dist == 0 ? 0.0 : offset.direction;
@@ -2051,6 +2068,7 @@ class _GreetingPageState extends State<GreetingPage>
         _wormholeCaptured.add(star.seed);
       }
     }
+    if (!stillTracked) _wormholeAnchor.remove(star.seed);
     return result;
   }
 
