@@ -1,12 +1,20 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web/web.dart' as web;
 
-void main() {
+import 'firebase_options.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.web);
   runApp(const MyApp());
 }
 
@@ -906,7 +914,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 49;
+  static const int editCount = 50;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -1531,14 +1539,17 @@ class _GreetingPageState extends State<GreetingPage>
     );
   });
 
-  // How many times this browser has ever opened the wormhole easter egg —
-  // persisted in the browser's local storage via shared_preferences, so it
-  // survives reloads/tab closes instead of resetting with the rest of the
-  // in-memory state every time the page loads.
+  // How many times the wormhole easter egg has been opened. While signed
+  // out, this is stored per-browser in shared_preferences (as before).
+  // Signing in with Google switches the source of truth to a Firestore
+  // document keyed by the account's UID, so the same count follows the
+  // person across devices/browsers instead of resetting per browser.
   static const _wormholeCountPrefsKey = 'wormholeOpenCount';
   int _wormholeOpenCount = 0;
+  User? _user;
+  StreamSubscription<User?>? _authSub;
 
-  Future<void> _loadWormholeCount() async {
+  Future<void> _loadLocalWormholeCount() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
@@ -1551,8 +1562,51 @@ class _GreetingPageState extends State<GreetingPage>
     setState(() {
       _wormholeOpenCount = next;
     });
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_wormholeCountPrefsKey, next);
+    final user = _user;
+    if (user != null) {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set(
+        {'wormholeOpenCount': next},
+        SetOptions(merge: true),
+      );
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_wormholeCountPrefsKey, next);
+    }
+  }
+
+  // Called once right after sign-in: reads the account's saved count from
+  // Firestore, or (first sign-in ever) seeds it with whatever the local
+  // per-browser count already was, so the person doesn't feel like signing
+  // in reset their progress to zero.
+  Future<void> _syncWormholeCountOnSignIn(String uid) async {
+    final docRef = FirebaseFirestore.instance.collection('users').doc(uid);
+    final doc = await docRef.get();
+    if (!mounted) return;
+    if (doc.exists) {
+      setState(() {
+        _wormholeOpenCount = (doc.data()?['wormholeOpenCount'] as int?) ?? 0;
+      });
+    } else {
+      await docRef.set({'wormholeOpenCount': _wormholeOpenCount});
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    try {
+      final credential = await FirebaseAuth.instance.signInWithPopup(
+        GoogleAuthProvider(),
+      );
+      final uid = credential.user?.uid;
+      if (uid != null) await _syncWormholeCountOnSignIn(uid);
+    } catch (_) {
+      // Demo-level auth: a failed/cancelled popup just leaves the user
+      // signed out, nothing else to recover here.
+    }
+  }
+
+  Future<void> _signOut() async {
+    await FirebaseAuth.instance.signOut();
+    await _loadLocalWormholeCount();
   }
 
   @override
@@ -1562,12 +1616,17 @@ class _GreetingPageState extends State<GreetingPage>
       vsync: this,
       duration: const Duration(seconds: 1),
     )..repeat();
-    _loadWormholeCount();
+    _loadLocalWormholeCount();
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (!mounted) return;
+      setState(() => _user = user);
+    });
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _authSub?.cancel();
     super.dispose();
   }
 
@@ -1824,6 +1883,24 @@ class _GreetingPageState extends State<GreetingPage>
                                       ),
                                     ),
                                   ],
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: _user == null
+                                        ? _signInWithGoogle
+                                        : _signOut,
+                                    child: Text(
+                                      _user == null
+                                          ? 'увійти'
+                                          : 'вийти (${_user!.displayName ?? _user!.email ?? '...'})',
+                                      style: _versionLabelStyle.copyWith(
+                                        color: _user == null
+                                            ? Colors.lightBlueAccent
+                                            : Colors.greenAccent,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
