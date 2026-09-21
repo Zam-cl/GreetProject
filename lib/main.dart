@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web/web.dart' as web;
 
 void main() {
@@ -905,7 +906,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 48;
+  static const int editCount = 49;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -1504,6 +1505,7 @@ class _GreetingPageState extends State<GreetingPage>
       _wormholePressStart = null;
       _wormholePressStartTime = null;
       _wormholes.add(_Wormhole(center: pos, startTime: t));
+      _bumpWormholeCount();
     }
   }
 
@@ -1529,6 +1531,30 @@ class _GreetingPageState extends State<GreetingPage>
     );
   });
 
+  // How many times this browser has ever opened the wormhole easter egg —
+  // persisted in the browser's local storage via shared_preferences, so it
+  // survives reloads/tab closes instead of resetting with the rest of the
+  // in-memory state every time the page loads.
+  static const _wormholeCountPrefsKey = 'wormholeOpenCount';
+  int _wormholeOpenCount = 0;
+
+  Future<void> _loadWormholeCount() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _wormholeOpenCount = prefs.getInt(_wormholeCountPrefsKey) ?? 0;
+    });
+  }
+
+  Future<void> _bumpWormholeCount() async {
+    final next = _wormholeOpenCount + 1;
+    setState(() {
+      _wormholeOpenCount = next;
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_wormholeCountPrefsKey, next);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1536,6 +1562,7 @@ class _GreetingPageState extends State<GreetingPage>
       vsync: this,
       duration: const Duration(seconds: 1),
     )..repeat();
+    _loadWormholeCount();
   }
 
   @override
@@ -1787,6 +1814,16 @@ class _GreetingPageState extends State<GreetingPage>
                                       style: _versionLabelStyle,
                                     ),
                                   ),
+                                  if (_wormholeOpenCount > 0) ...[
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'кротовин: $_wormholeOpenCount',
+                                      style: _versionLabelStyle.copyWith(
+                                        color: Colors.white38,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
