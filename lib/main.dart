@@ -934,7 +934,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 53;
+  static const int editCount = 54;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -1621,17 +1621,27 @@ class _GreetingPageState extends State<GreetingPage>
     }
   }
 
-  // Uses a full-page redirect rather than a popup: Firefox's cross-site
-  // storage partitioning (and most mobile browsers) breaks the hidden
-  // iframe handshake signInWithPopup relies on to hear back from Google,
-  // which surfaced as a repeating uncaught error on desktop Firefox and an
-  // indefinitely stuck "signing in" state on mobile. Redirect sidesteps
-  // that handshake entirely by just navigating away and back.
-  Future<void> _signInWithGoogle() async {
+  // Popup is used on wide (desktop) screens and redirect on narrow
+  // (mobile) ones. Redirect turned out to have its own problem on this
+  // static GitHub Pages host — getRedirectResult() consistently comes back
+  // empty on return, in both Firefox and Chrome — while popup was never
+  // actually confirmed broken on desktop (the repeating console error
+  // blamed on it earlier turned out to be the unrelated gradient bug).
+  // Popup is a known dead end on mobile browsers specifically (confirmed:
+  // indefinite "signing in" hang), so redirect stays there.
+  Future<void> _signInWithGoogle(bool useRedirect) async {
     try {
-      await FirebaseAuth.instance.signInWithRedirect(GoogleAuthProvider());
+      if (useRedirect) {
+        await FirebaseAuth.instance.signInWithRedirect(GoogleAuthProvider());
+      } else {
+        final credential = await FirebaseAuth.instance.signInWithPopup(
+          GoogleAuthProvider(),
+        );
+        final uid = credential.user?.uid;
+        if (uid != null) await _syncWormholeCountOnSignIn(uid);
+      }
     } catch (e) {
-      debugPrint('Google sign-in failed to start: $e');
+      debugPrint('Google sign-in failed: $e');
     }
   }
 
@@ -1936,7 +1946,10 @@ class _GreetingPageState extends State<GreetingPage>
                                   GestureDetector(
                                     behavior: HitTestBehavior.opaque,
                                     onTap: _user == null
-                                        ? _signInWithGoogle
+                                        ? () => _signInWithGoogle(
+                                            realSize.width <
+                                                _uiReferenceWidth,
+                                          )
                                         : _signOut,
                                     child: Text(
                                       _user == null
