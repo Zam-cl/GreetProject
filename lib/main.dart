@@ -456,11 +456,16 @@ class _GalaxyPainter extends CustomPainter {
       Offset.zero,
       effectiveR * 0.16,
       Paint()
-        ..shader = ui.Gradient.radial(Offset.zero, effectiveR * 0.16, [
-          Colors.white.withValues(alpha: 0.95),
-          const Color(0xFFFFE9B3).withValues(alpha: 0.5),
-          const Color(0xFFFFE9B3).withValues(alpha: 0.0),
-        ])
+        ..shader = ui.Gradient.radial(
+          Offset.zero,
+          effectiveR * 0.16,
+          [
+            Colors.white.withValues(alpha: 0.95),
+            const Color(0xFFFFE9B3).withValues(alpha: 0.5),
+            const Color(0xFFFFE9B3).withValues(alpha: 0.0),
+          ],
+          const [0.0, 0.5, 1.0],
+        )
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
     );
 
@@ -588,11 +593,16 @@ class _GalaxyExplosionPainter extends CustomPainter {
         center,
         flashR,
         Paint()
-          ..shader = ui.Gradient.radial(center, flashR, [
-            Colors.white.withValues(alpha: (1 - flashT) * 0.95),
-            const Color(0xFFFFD9A0).withValues(alpha: (1 - flashT) * 0.5),
-            const Color(0xFFFFD9A0).withValues(alpha: 0.0),
-          ])
+          ..shader = ui.Gradient.radial(
+            center,
+            flashR,
+            [
+              Colors.white.withValues(alpha: (1 - flashT) * 0.95),
+              const Color(0xFFFFD9A0).withValues(alpha: (1 - flashT) * 0.5),
+              const Color(0xFFFFD9A0).withValues(alpha: 0.0),
+            ],
+            const [0.0, 0.5, 1.0],
+          )
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 24),
       );
     }
@@ -806,11 +816,16 @@ class _WormholePainter extends CustomPainter {
       w.center,
       discR,
       Paint()
-        ..shader = ui.Gradient.radial(w.center, discR, [
-          const Color(0xFF05010A),
-          const Color(0xFF1B0A2E).withValues(alpha: 0.6),
-          const Color(0xFF1B0A2E).withValues(alpha: 0.0),
-        ])
+        ..shader = ui.Gradient.radial(
+          w.center,
+          discR,
+          [
+            const Color(0xFF05010A),
+            const Color(0xFF1B0A2E).withValues(alpha: 0.6),
+            const Color(0xFF1B0A2E).withValues(alpha: 0.0),
+          ],
+          const [0.0, 0.5, 1.0],
+        )
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
     );
 
@@ -840,11 +855,16 @@ class _WormholePainter extends CustomPainter {
       w.center,
       r,
       Paint()
-        ..shader = ui.Gradient.radial(w.center, r, [
-          Colors.white.withValues(alpha: (1 - flashT) * 0.95),
-          const Color(0xFFB388FF).withValues(alpha: (1 - flashT) * 0.5),
-          const Color(0xFFB388FF).withValues(alpha: 0.0),
-        ])
+        ..shader = ui.Gradient.radial(
+          w.center,
+          r,
+          [
+            Colors.white.withValues(alpha: (1 - flashT) * 0.95),
+            const Color(0xFFB388FF).withValues(alpha: (1 - flashT) * 0.5),
+            const Color(0xFFB388FF).withValues(alpha: 0.0),
+          ],
+          const [0.0, 0.5, 1.0],
+        )
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18),
     );
   }
@@ -914,7 +934,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 52;
+  static const int editCount = 53;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
