@@ -454,11 +454,11 @@ class _GalaxyPainter extends CustomPainter {
 
     canvas.drawCircle(
       Offset.zero,
-      effectiveR * 0.16,
+      effectiveR * 0.13,
       Paint()
         ..shader = ui.Gradient.radial(
           Offset.zero,
-          effectiveR * 0.16,
+          effectiveR * 0.13,
           [
             Colors.white.withValues(alpha: 0.95),
             const Color(0xFFFFE9B3).withValues(alpha: 0.5),
@@ -473,7 +473,7 @@ class _GalaxyPainter extends CustomPainter {
     // bright photon ring hugging the shadow's edge, then the black shadow
     // itself on top. The ring is squashed the same as the disc so it reads
     // as viewed at the same tilt.
-    final ringOuter = effectiveR * 0.17;
+    final ringOuter = effectiveR * 0.135;
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset.zero,
@@ -492,7 +492,7 @@ class _GalaxyPainter extends CustomPainter {
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
     );
 
-    final holeR = effectiveR * 0.075;
+    final holeR = effectiveR * 0.06;
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset.zero,
@@ -764,7 +764,7 @@ class _Wormhole {
 
   static List<_WormholeMote> _buildMotes() {
     final random = Random();
-    return List.generate(140, (i) {
+    return List.generate(70, (i) {
       return _WormholeMote(
         startAngle: random.nextDouble() * 2 * pi,
         startRadius: 60 + random.nextDouble() * 220,
@@ -934,7 +934,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 54;
+  static const int editCount = 55;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -1157,8 +1157,13 @@ class _GreetingPageState extends State<GreetingPage>
   // — the pointer while dragging, or wherever you last let go. Stars near
   // the core catch up almost instantly; outer arm stars lag behind, which
   // is what gives a drag its stretchy, swarm-follow feel and makes the
-  // galaxy visibly re-gather once you stop moving it.
+  // galaxy visibly re-gather once you stop moving it. The black hole itself
+  // eases toward `_galaxyTarget` too (`_blackHoleLag`, its own on-screen
+  // position) rather than snapping straight to the pointer, so it reads as
+  // the swarm's actual gravitational center instead of looking glued to
+  // the cursor.
   Offset? _galaxyTarget;
+  Offset? _blackHoleLag;
   double? _galaxyMaxR;
   List<Offset>? _particleLag;
   bool _draggingGalaxy = false;
@@ -1261,6 +1266,7 @@ class _GreetingPageState extends State<GreetingPage>
     // very first frame, before the title's real on-screen bounds are known.
     final rect = _pickGalaxyRect(screenSize);
     _galaxyTarget = rect.center;
+    _blackHoleLag = rect.center;
     _galaxyMaxR = rect.width / 2;
     _particleLag = List<Offset>.filled(
       _galaxyParticles.length,
@@ -1277,6 +1283,7 @@ class _GreetingPageState extends State<GreetingPage>
       final refined = _pickGalaxyRect(screenSize, avoidRect: titleRect);
       setState(() {
         _galaxyTarget = refined.center;
+        _blackHoleLag = refined.center;
         _galaxyMaxR = refined.width / 2;
         _particleLag = List<Offset>.filled(
           _galaxyParticles.length,
@@ -1288,7 +1295,7 @@ class _GreetingPageState extends State<GreetingPage>
   }
 
   void _triggerGalaxyExplosion(double t) {
-    final center = _galaxyTarget;
+    final center = _blackHoleLag ?? _galaxyTarget;
     final lag = _particleLag;
     final maxR = _galaxyMaxR;
     if (center == null || lag == null || maxR == null) return;
@@ -1355,6 +1362,7 @@ class _GreetingPageState extends State<GreetingPage>
     _hidden = false;
     _hiddenSince = null;
     _galaxyTarget = rect.center;
+    _blackHoleLag = rect.center;
     _galaxyMaxR = rect.width / 2;
     _particleLag = List<Offset>.filled(
       _galaxyParticles.length,
@@ -1418,6 +1426,14 @@ class _GreetingPageState extends State<GreetingPage>
       final factor = 1 - exp(-dt / tau);
       lag[i] = Offset.lerp(lag[i], target, factor)!;
     }
+
+    // The black hole itself eases toward the target with a fixed, gentle
+    // time constant — noticeably softer than instant so it reads as the
+    // swarm's own center of gravity rather than something rigidly pinned
+    // to the pointer, but still faster than the trailing outer arms.
+    const blackHoleTau = 0.3;
+    final blackHoleFactor = 1 - exp(-dt / blackHoleTau);
+    _blackHoleLag = Offset.lerp(_blackHoleLag ?? target, target, blackHoleFactor);
 
     if (_draggingGalaxy) {
       final haloFactor = 1 - exp(-dt / 0.35);
@@ -1816,7 +1832,7 @@ class _GreetingPageState extends State<GreetingPage>
                                     particleCenters: _particleLag!,
                                     rotation: t * 2 * pi / 45,
                                     maxR: _galaxyMaxR!,
-                                    blackHoleCenter: _galaxyTarget!,
+                                    blackHoleCenter: _blackHoleLag!,
                                     haloOpacity: _haloOpacity,
                                     formation: _galaxyFormationProgress(t),
                                     wormholePull: galaxyPull.isEmpty
