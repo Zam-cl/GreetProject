@@ -914,7 +914,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 50;
+  static const int editCount = 51;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -1564,48 +1564,63 @@ class _GreetingPageState extends State<GreetingPage>
     });
     final user = _user;
     if (user != null) {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set(
-        {'wormholeOpenCount': next},
-        SetOptions(merge: true),
-      );
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .set({'wormholeOpenCount': next}, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint('Failed to save wormhole count to Firestore: $e');
+      }
     } else {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_wormholeCountPrefsKey, next);
     }
   }
 
-  // Called once right after sign-in: reads the account's saved count from
-  // Firestore, or (first sign-in ever) seeds it with whatever the local
-  // per-browser count already was, so the person doesn't feel like signing
-  // in reset their progress to zero.
+  // Called whenever a signed-in user appears (fresh sign-in or an already
+  // signed-in session resuming on page load): reads the account's saved
+  // count from Firestore, or (first sign-in ever) seeds it with whatever
+  // the local per-browser count already was, so the person doesn't feel
+  // like signing in reset their progress to zero.
   Future<void> _syncWormholeCountOnSignIn(String uid) async {
-    final docRef = FirebaseFirestore.instance.collection('users').doc(uid);
-    final doc = await docRef.get();
-    if (!mounted) return;
-    if (doc.exists) {
-      setState(() {
-        _wormholeOpenCount = (doc.data()?['wormholeOpenCount'] as int?) ?? 0;
-      });
-    } else {
-      await docRef.set({'wormholeOpenCount': _wormholeOpenCount});
+    try {
+      final docRef = FirebaseFirestore.instance.collection('users').doc(uid);
+      final doc = await docRef.get();
+      if (!mounted) return;
+      if (doc.exists) {
+        setState(() {
+          _wormholeOpenCount =
+              (doc.data()?['wormholeOpenCount'] as int?) ?? 0;
+        });
+      } else {
+        await docRef.set({'wormholeOpenCount': _wormholeOpenCount});
+      }
+    } catch (e) {
+      debugPrint('Failed to sync wormhole count from Firestore: $e');
     }
   }
 
+  // Uses a full-page redirect rather than a popup: Firefox's cross-site
+  // storage partitioning (and most mobile browsers) breaks the hidden
+  // iframe handshake signInWithPopup relies on to hear back from Google,
+  // which surfaced as a repeating uncaught error on desktop Firefox and an
+  // indefinitely stuck "signing in" state on mobile. Redirect sidesteps
+  // that handshake entirely by just navigating away and back.
   Future<void> _signInWithGoogle() async {
     try {
-      final credential = await FirebaseAuth.instance.signInWithPopup(
-        GoogleAuthProvider(),
-      );
-      final uid = credential.user?.uid;
-      if (uid != null) await _syncWormholeCountOnSignIn(uid);
-    } catch (_) {
-      // Demo-level auth: a failed/cancelled popup just leaves the user
-      // signed out, nothing else to recover here.
+      await FirebaseAuth.instance.signInWithRedirect(GoogleAuthProvider());
+    } catch (e) {
+      debugPrint('Google sign-in failed to start: $e');
     }
   }
 
   Future<void> _signOut() async {
-    await FirebaseAuth.instance.signOut();
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (e) {
+      debugPrint('Sign-out failed: $e');
+    }
     await _loadLocalWormholeCount();
   }
 
@@ -1619,7 +1634,9 @@ class _GreetingPageState extends State<GreetingPage>
     _loadLocalWormholeCount();
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       if (!mounted) return;
+      final justSignedIn = _user == null && user != null;
       setState(() => _user = user);
+      if (justSignedIn) _syncWormholeCountOnSignIn(user.uid);
     });
   }
 
