@@ -914,7 +914,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 51;
+  static const int editCount = 52;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -1637,6 +1637,18 @@ class _GreetingPageState extends State<GreetingPage>
       final justSignedIn = _user == null && user != null;
       setState(() => _user = user);
       if (justSignedIn) _syncWormholeCountOnSignIn(user.uid);
+    });
+    // authStateChanges() alone doesn't surface an error if the redirect
+    // sign-in itself failed to complete (only successful sign-ins show up
+    // there) — call this explicitly so a failure prints a clear reason
+    // instead of just silently never signing anyone in.
+    FirebaseAuth.instance.getRedirectResult().then((result) {
+      debugPrint(
+        'getRedirectResult: user=${result.user?.uid}, '
+        'credential=${result.credential}',
+      );
+    }).catchError((e) {
+      debugPrint('getRedirectResult failed: $e');
     });
   }
 
