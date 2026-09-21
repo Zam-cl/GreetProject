@@ -721,6 +721,16 @@ class _Wormhole {
   final double startTime;
   final List<_WormholeMote> motes;
 
+  // Where a star was, and exactly when, the instant *this* wormhole first
+  // caught it — scoped per-wormhole (not shared globally) so two wormholes
+  // open at once each track their own captures independently instead of
+  // clobbering each other's reference point. Per-star elapsed time is
+  // measured from this capture moment, not from when the wormhole itself
+  // opened, so every star's pull starts ramping from zero the instant it's
+  // caught — no stall beforehand, regardless of how far in it was or how
+  // long the wormhole had already been open.
+  final Map<int, ({Offset anchor, double capturedAt})> starCaptures = {};
+
   // Called whenever this wormhole actually swallows a piece of the galaxy
   // or the title — recolors a sizeable batch of its existing motes to that
   // piece's own color, so the debris flying back out visibly shows bits of
@@ -922,7 +932,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 59;
+  static const int editCount = 60;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -2013,52 +2023,45 @@ class _GreetingPageState extends State<GreetingPage>
   // into view at the exact place the wormhole grabbed it from.
   final Set<int> _wormholeCaptured = {};
 
-  // The screen position each currently-tracked star had the instant it
-  // first came within a wormhole's reach — used as the spiral's geometric
-  // reference instead of the star's live, continuously-drifting position.
-  // Without this, a star's own natural twinkle cycle can teleport it to a
-  // fresh random spot (see `_Star.positionAt`) mid-capture, which jolted
-  // the spiral's angle/radius since they were recomputed from that live
-  // position every frame — looking like the star "froze" and jumped right
-  // before spiraling in properly.
-  final Map<int, Offset> _wormholeAnchor = {};
-
   // Pulls a screen position toward any wormhole currently in its suck-in
   // phase — this is what actually drags the real stars in, rather than just
   // showing a separate effect near them. Every star inside the influence
-  // radius fully reaches the center by the end of the capture window
-  // (`_Wormhole.captureFraction`); distance only staggers *when* a star
-  // starts moving (farther ones start a beat later), never how far it
-  // ultimately travels — capping the distance travelled by distance, as an
-  // earlier version did, made far stars stall partway and then snap back
-  // once the pull switched off instead of ever reaching the center.
-  // Spirals the star in around the wormhole's center from wherever it
-  // naturally is the moment it's caught — no freeze or teleport, it starts
-  // curving in on the very first frame it's within range — all spiraling
-  // the same rotational direction, like real matter circling one
-  // accretion disc, rather than a straight-line pull or each star
-  // spinning its own way.
+  // radius fully reaches the center by the end of its own capture window;
+  // farther-in wormholes captured at different times don't affect each
+  // other since each wormhole tracks its own captures (`w.starCaptures`) —
+  // with several wormholes open at once, a star pulled by one no longer
+  // gets its position corrupted by another using an unrelated reference
+  // point. No delay before a star starts moving, either: pull ramps from
+  // zero starting the instant a star is caught (using time since *that*
+  // capture, not since the wormhole opened), so there's no stall-then-jump
+  // — it curves in immediately, spiraling the same rotational direction as
+  // everything else, like real matter circling one accretion disc, rather
+  // than a straight-line pull.
   Offset? _wormholePulledPosition(_Star star, double t, Size size) {
     Offset? result;
     const influenceRadius = 260.0;
-    var stillTracked = false;
     for (final w in _wormholes) {
-      final elapsed = t - w.startTime;
-      if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
-      var anchor = _wormholeAnchor[star.seed];
-      if (anchor == null) {
+      final wormholeElapsed = t - w.startTime;
+      if (wormholeElapsed < 0 || wormholeElapsed > _Wormhole.suckDuration) {
+        continue;
+      }
+      var capture = w.starCaptures[star.seed];
+      if (capture == null) {
         final livePos = Offset(
           star.positionAt(t).dx * size.width,
           star.positionAt(t).dy * size.height,
         );
         if ((livePos - w.center).distance > influenceRadius) continue;
-        anchor = livePos;
-        _wormholeAnchor[star.seed] = anchor;
+        capture = (anchor: livePos, capturedAt: t);
+        w.starCaptures[star.seed] = capture;
       }
-      stillTracked = true;
-      final offset = anchor - w.center;
+      final offset = capture.anchor - w.center;
       final dist = offset.distance;
-      final pull = _wormholePullFactor(elapsed, dist, influenceRadius);
+      final localElapsed = t - capture.capturedAt;
+      final rawProgress = (localElapsed /
+              (_Wormhole.suckDuration * _Wormhole.captureFraction))
+          .clamp(0.0, 1.0);
+      final pull = Curves.easeOutCubic.transform(rawProgress);
       const spinRate = 2.2; // same direction/rate for every star
       final baseAngle = dist == 0 ? 0.0 : offset.direction;
       final angle = baseAngle + spinRate * pull;
@@ -2068,7 +2071,6 @@ class _GreetingPageState extends State<GreetingPage>
         _wormholeCaptured.add(star.seed);
       }
     }
-    if (!stillTracked) _wormholeAnchor.remove(star.seed);
     return result;
   }
 
