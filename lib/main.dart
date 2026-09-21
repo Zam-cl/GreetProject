@@ -419,9 +419,9 @@ class _GalaxyPainter extends CustomPainter {
     canvas.translate(blackHoleCenter.dx, blackHoleCenter.dy);
     canvas.drawCircle(
       Offset.zero,
-      effectiveR * 1.05,
+      effectiveR * 0.5,
       Paint()
-        ..shader = ui.Gradient.radial(Offset.zero, effectiveR * 1.05, [
+        ..shader = ui.Gradient.radial(Offset.zero, effectiveR * 0.5, [
           const Color(0xFF7F5CFF).withValues(alpha: 0.18 * haloOpacity),
           const Color(0xFF7F5CFF).withValues(alpha: 0.0),
         ])
@@ -828,24 +828,12 @@ class _WormholePainter extends CustomPainter {
         )
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
     );
-
-    final captureT = (progress / _Wormhole.captureFraction).clamp(0.0, 1.0);
-    final easeIn = Curves.easeOutCubic.transform(captureT);
-    for (final m in w.motes) {
-      final radius = m.startRadius * (1 - easeIn);
-      // Spins faster the closer it gets to the center, like real infalling
-      // matter speeding up toward the event horizon.
-      final angle = m.startAngle + m.spinRate * easeIn;
-      final pos =
-          w.center + Offset(cos(angle) * radius, sin(angle) * radius * 0.6);
-      final fade = (1 - progress * 0.3).clamp(0.0, 1.0);
-      final currentSize = max(0.3, m.size * (1.1 - progress * 0.5));
-      canvas.drawCircle(
-        pos,
-        currentSize,
-        Paint()..color = m.color.withValues(alpha: fade),
-      );
-    }
+    // The spiraling-in visual itself now comes entirely from the real
+    // background stars caught by `_wormholePulledPosition` (drawn by
+    // `_StarsPainter`) — no decorative motes drawn here anymore, so
+    // everything visibly spiraling in is an actual captured star rather
+    // than an unrelated dot conjured just for the effect. `w.motes` is
+    // still used for the outward burst below.
   }
 
   void _paintFlash(Canvas canvas, _Wormhole w, double elapsed) {
@@ -934,7 +922,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 55;
+  static const int editCount = 56;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -1179,7 +1167,7 @@ class _GreetingPageState extends State<GreetingPage>
   // Holding the drag too long makes the galaxy blow apart instead of just
   // following the pointer; it stays gone for a beat, then reappears
   // somewhere new.
-  static const double _dragExplodeThreshold = 2.2;
+  static const double _dragExplodeThreshold = 2.8;
   static const double _reappearDelay = 1.4;
   bool _exploding = false;
   double? _explodeStartTime;
@@ -1427,11 +1415,12 @@ class _GreetingPageState extends State<GreetingPage>
       lag[i] = Offset.lerp(lag[i], target, factor)!;
     }
 
-    // The black hole itself eases toward the target with a fixed, gentle
-    // time constant — noticeably softer than instant so it reads as the
-    // swarm's own center of gravity rather than something rigidly pinned
-    // to the pointer, but still faster than the trailing outer arms.
-    const blackHoleTau = 0.3;
+    // The black hole itself eases toward the target with its own short
+    // time constant — faster than every star (the innermost particles'
+    // tau bottoms out at 0.12), so it's always the first thing to move,
+    // leading the swarm like the actual mass everything else follows,
+    // while still not being a perfectly rigid 1:1 pin to the pointer.
+    const blackHoleTau = 0.06;
     final blackHoleFactor = 1 - exp(-dt / blackHoleTau);
     _blackHoleLag = Offset.lerp(_blackHoleLag ?? target, target, blackHoleFactor);
 
@@ -1553,7 +1542,7 @@ class _GreetingPageState extends State<GreetingPage>
     }
   }
 
-  static final List<_Star> _stars = List.generate(175, (index) {
+  static final List<_Star> _stars = List.generate(260, (index) {
     final random = Random();
     return _Star(
       seed: index,
@@ -2012,16 +2001,27 @@ class _GreetingPageState extends State<GreetingPage>
   // ultimately travels — capping the distance travelled by distance, as an
   // earlier version did, made far stars stall partway and then snap back
   // once the pull switched off instead of ever reaching the center.
+  // Spirals the star in around the wormhole's center rather than a
+  // straight-line pull — same shrinking-radius/growing-angle shape the
+  // wormhole's own decorative motes used to draw, but applied to the real
+  // captured star so the visible spiral is made of actually-swallowed
+  // stars instead of unrelated dots conjured for the effect.
   Offset? _wormholePulledPosition(_Star star, Offset basePos, double t) {
     Offset? result;
     const influenceRadius = 260.0;
     for (final w in _wormholes) {
       final elapsed = t - w.startTime;
       if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
-      final dist = (w.center - basePos).distance;
+      final offset = basePos - w.center;
+      final dist = offset.distance;
       if (dist > influenceRadius) continue;
       final pull = _wormholePullFactor(elapsed, dist, influenceRadius);
-      result = Offset.lerp(basePos, w.center, pull);
+      final spinDir = star.seed.isEven ? 1.0 : -1.0;
+      final spinRate = spinDir * (1.8 + (star.seed % 7) * 0.35);
+      final baseAngle = dist == 0 ? 0.0 : offset.direction;
+      final angle = baseAngle + spinRate * pull;
+      final radius = dist * (1 - pull);
+      result = w.center + Offset(cos(angle) * radius, sin(angle) * radius * 0.6);
       if (pull > 0.95) {
         _wormholeCaptured.add(star.seed);
       }
