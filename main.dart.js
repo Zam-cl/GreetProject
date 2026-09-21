@@ -20846,7 +20846,7 @@ auI(){var s,r,q,p=null,o=t.re,n=A.d([],t.Hv),m=J.ul(12,t.yi)
 for(s=0;s<12;++s)m[s]=new A.c4(p,o)
 r=t.S
 q=t.Jk
-return new A.y5(B.j,new A.c4(p,o),new A.c4(p,o),n,m,A.o(r,q),A.o(r,t.i),A.o(r,q),A.d([],t.jv),A.am(r),p,p)},
+return new A.y5(B.j,new A.c4(p,o),new A.c4(p,o),n,m,A.o(r,q),A.o(r,t.i),A.o(r,q),A.d([],t.jv),A.am(r),A.o(r,t.o),p,p)},
 DI:function DI(a){this.a=a},
 qi:function qi(a,b,c,d,e){var _=this
 _.a=a
@@ -20935,7 +20935,7 @@ _.b=b
 _.c=c
 _.d=d},
 tR:function tR(a){this.a=a},
-y5:function y5(a,b,c,d,e,f,g,h,i,j,k,l){var _=this
+y5:function y5(a,b,c,d,e,f,g,h,i,j,k,l,m){var _=this
 _.d=$
 _.e=a
 _.f=b
@@ -20963,8 +20963,9 @@ _.p2=!1
 _.p3=0
 _.RG=_.R8=_.p4=null
 _.rx=j
-_.eF$=k
-_.cJ$=l
+_.ry=k
+_.eF$=l
+_.cJ$=m
 _.c=_.a=null},
 a6c:function a6c(a,b){this.a=a
 this.b=b},
@@ -62715,7 +62716,7 @@ if(m<=0)return
 for(n=p.length,l=-m,k=0;k<n;++k){j=Math.exp(l/(0.12+$.jj()[k].a*0.9))
 j=A.oQ(p[k],o,1-j)
 j.toString
-p[k]=j}n=Math.exp(l/0.12)
+p[k]=j}n=Math.exp(l/0.19)
 j=g.as
 if(j==null)j=o
 g.as=A.oQ(j,o,1-n)
@@ -62948,23 +62949,33 @@ if(s===0||b.b===0)return
 this.e=new A.A(B.d.bf((a.a/s-0.5)*2,-1,1),B.d.bf((a.b/b.b-0.5)*2,-1,1))},
 U9(){this.RG=Date.now()/1000+10},
 R(a){return new A.w7(A.arq(new A.a6u(this)),B.yR,null)},
-Yq(a0,a1,a2){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b,a
-for(s=this.k4,r=s.length,q=a2.a,p=a2.b,o=this.rx,n=a0.a,m=null,l=0;l<s.length;s.length===r||(0,A.v)(s),++l){k=s[l]
-j=a1-k.b
-if(j<0||j>3)continue
-i=k.a
-h=i.a
-g=a0.t4(a1).a*q-h
-i=i.b
-f=a0.t4(a1).b*p-i
-e=Math.sqrt(g*g+f*f)
-if(e>260)continue
-d=A.aeg(j,e,260)
-c=e===0?0:Math.atan2(f,g)
-b=c+2.2*d
-a=e*(1-d)
-m=new A.A(h+Math.cos(b)*a,i+Math.sin(b)*a*0.6)
-if(d>0.95)o.t(0,n)}return m},
+Yq(a4,a5,a6){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b,a,a0,a1,a2,a3
+for(s=this.k4,r=s.length,q=this.ry,p=a4.a,o=a6.a,n=a6.b,m=this.rx,l=null,k=!1,j=0;j<s.length;s.length===r||(0,A.v)(s),++j){i=s[j]
+h=a5-i.b
+if(h<0||h>3)continue
+g=q.h(0,p)
+if(g==null){f=a4.t4(a5).a*o
+e=a4.t4(a5).b*n
+d=new A.A(f,e)
+c=i.a
+f-=c.a
+c=e-c.b
+if(Math.sqrt(f*f+c*c)>260)continue
+q.l(0,p,d)
+g=d}f=i.a
+e=f.a
+c=g.a-e
+f=f.b
+b=g.b-f
+a=Math.sqrt(c*c+b*b)
+a0=A.aeg(h,a,260)
+a1=a===0?0:Math.atan2(b,c)
+a2=a1+2.2*a0
+a3=a*(1-a0)
+l=new A.A(e+Math.cos(a2)*a3,f+Math.sin(a2)*a3*0.6)
+if(a0>0.95)m.t(0,p)
+k=!0}if(!k)q.B(0,p)
+return l},
 Qy(a,b){$.abu()
 return A.jS(260,new A.a68(this,a,b),!0,t.NT)}}
 A.a6c.prototype={
@@ -63168,7 +63179,7 @@ a1.push(A.oV(0,A.tW(A.nX(b,b,new A.Iq(q,a)),!0)))
 a1.push(A.oV(0,A.tW(A.nX(b,b,new A.MF(p,a)),!0)))
 q=A.ara(B.w,B.ds,B.Af,16,b,new A.a6m(),B.bT,16,b,"Reload",B.vA)
 p=$.anv()
-q=A.d([q,B.Ir,A.Tx(B.ag,A.a2s("Test-v0.58",p),B.bR,!1,b,b,b,b,b,b,b,b,b,b,b,b,b,a0.gU8(),b,b,b)],l)
+q=A.d([q,B.Ir,A.Tx(B.ag,A.a2s("Test-v0.59",p),B.bR,!1,b,b,b,b,b,b,b,b,b,b,b,b,b,a0.gU8(),b,b,b)],l)
 o=a0.p3
 if(o>0)B.b.D(q,A.d([B.v3,A.a2s("\u043a\u0440\u043e\u0442\u043e\u0432\u0438\u043d: "+o,p.qG(B.jX,11))],l))
 q.push(B.v3)
