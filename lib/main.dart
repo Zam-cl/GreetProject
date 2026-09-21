@@ -922,7 +922,7 @@ class GreetingPage extends StatefulWidget {
 
 class _GreetingPageState extends State<GreetingPage>
     with SingleTickerProviderStateMixin {
-  static const int editCount = 57;
+  static const int editCount = 58;
 
   late final AnimationController _controller;
   Offset _parallax = Offset.zero;
@@ -1441,7 +1441,7 @@ class _GreetingPageState extends State<GreetingPage>
     // tau bottoms out at 0.12), so it's always the first thing to move,
     // leading the swarm like the actual mass everything else follows,
     // while still not being a perfectly rigid 1:1 pin to the pointer.
-    const blackHoleTau = 0.1;
+    const blackHoleTau = 0.12;
     final blackHoleFactor = 1 - exp(-dt / blackHoleTau);
     _blackHoleLag = Offset.lerp(_blackHoleLag ?? target, target, blackHoleFactor);
 
@@ -2022,59 +2022,30 @@ class _GreetingPageState extends State<GreetingPage>
   // ultimately travels — capping the distance travelled by distance, as an
   // earlier version did, made far stars stall partway and then snap back
   // once the pull switched off instead of ever reaching the center.
-  // Three stages once a star comes within range: it freezes in place (stops
-  // following its own natural drift) for a short beat, then instantly
-  // teleports inward to a closer "gathering" distance, and only then spirals
-  // the rest of the way into the wormhole's center — all spiraling the same
-  // rotational direction, like real matter circling one accretion disc,
-  // rather than a straight-line pull or each star spinning its own way.
-  static const double _wormholeFreezeDuration = 0.2;
-  static const double _wormholeTeleportFraction = 0.55;
-
+  // Spirals the star in around the wormhole's center from wherever it
+  // naturally is the moment it's caught — no freeze or teleport, it starts
+  // curving in on the very first frame it's within range — all spiraling
+  // the same rotational direction, like real matter circling one
+  // accretion disc, rather than a straight-line pull or each star
+  // spinning its own way.
   Offset? _wormholePulledPosition(_Star star, double t, Size size) {
     Offset? result;
     const influenceRadius = 260.0;
     for (final w in _wormholes) {
       final elapsed = t - w.startTime;
       if (elapsed < 0 || elapsed > _Wormhole.suckDuration) continue;
-
-      // Measured from where the star was the instant the wormhole opened,
-      // not its continuously-drifting current position — once caught, a
-      // star stops twinkling/drifting on its own and only moves through
-      // the stages below.
-      final frozenPos = Offset(
-        star.positionAt(w.startTime).dx * size.width,
-        star.positionAt(w.startTime).dy * size.height,
+      final basePos = Offset(
+        star.positionAt(t).dx * size.width,
+        star.positionAt(t).dy * size.height,
       );
-      final offset = frozenPos - w.center;
+      final offset = basePos - w.center;
       final dist = offset.distance;
       if (dist > influenceRadius) continue;
-
-      if (elapsed < _wormholeFreezeDuration) {
-        result = frozenPos;
-        continue;
-      }
-
-      final spiralElapsed = elapsed - _wormholeFreezeDuration;
-      final spiralDuration =
-          (_Wormhole.suckDuration * _Wormhole.captureFraction) -
-          _wormholeFreezeDuration;
-      final delay = (dist / influenceRadius) * 0.35;
-      final rawProgress = (spiralElapsed / max(0.01, spiralDuration)).clamp(
-        0.0,
-        1.0,
-      );
-      final adjusted = ((rawProgress - delay) / (1 - delay)).clamp(0.0, 1.0);
-      final pull = Curves.easeOutCubic.transform(adjusted);
-
-      // The spiral starts from the already-teleported-closer distance, not
-      // the star's original full distance — the teleport itself is the
-      // sudden jump from `frozenPos` (above) to this point at pull == 0.
+      final pull = _wormholePullFactor(elapsed, dist, influenceRadius);
       const spinRate = 2.2; // same direction/rate for every star
-      final startRadius = dist * _wormholeTeleportFraction;
       final baseAngle = dist == 0 ? 0.0 : offset.direction;
       final angle = baseAngle + spinRate * pull;
-      final radius = startRadius * (1 - pull);
+      final radius = dist * (1 - pull);
       result = w.center + Offset(cos(angle) * radius, sin(angle) * radius * 0.6);
       if (pull > 0.95) {
         _wormholeCaptured.add(star.seed);
